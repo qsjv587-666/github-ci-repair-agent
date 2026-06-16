@@ -1,0 +1,17 @@
+Run npm test
+
+not ok 1 - getActiveTodos returns only incomplete todos
+  ---
+  location: '/workspace/test/todos.test.js:5:1'
+  failureType: 'testCodeFailure'
+  error: |-
+    Expected values to be strictly deep-equal:
+    actual includes completed todo
+  code: 'ERR_ASSERTION'
+  name: 'AssertionError'
+  stack: |-
+    TestContext.<anonymous> (test/todos.test.js:11:10)
+    getActiveTodos (src/todos.js:1:17)
+  ...
+
+1 test failed

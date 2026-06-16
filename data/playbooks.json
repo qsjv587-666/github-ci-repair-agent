@@ -1,0 +1,67 @@
+[
+  {
+    "id": "playbook_node_assertion_state_mismatch",
+    "failureSignature": "javascript:test_assertion:ERR_ASSERTION:ui_state",
+    "failureType": "test_assertion_failure",
+    "errorCode": "ERR_ASSERTION",
+    "language": "javascript",
+    "changedFilePatterns": ["src/**", "test/**"],
+    "strategy": "When a UI/state assertion fails, prefer fixing source state derivation before weakening tests.",
+    "verificationCommands": ["npm test"],
+    "successCount": 3,
+    "failureCount": 1,
+    "confidence": 0.75
+  },
+  {
+    "id": "playbook_ts2322_adapter_type_mismatch",
+    "failureSignature": "typescript:typecheck:TS2322:api_adapter",
+    "failureType": "typecheck_error",
+    "errorCode": "TS2322",
+    "language": "typescript",
+    "changedFilePatterns": ["src/api/**", "src/types/**"],
+    "strategy": "For TS2322 in API adapters, check whether adapter output matches shared schema/type definitions.",
+    "verificationCommands": ["pnpm typecheck"],
+    "successCount": 7,
+    "failureCount": 2,
+    "confidence": 0.78
+  },
+  {
+    "id": "playbook_react_testing_library_async",
+    "failureSignature": "javascript:test_assertion:react_testing_library:async_state",
+    "failureType": "test_assertion_failure",
+    "errorCode": "ASSERTION",
+    "language": "javascript",
+    "changedFilePatterns": ["src/**/*.tsx", "test/**/*.tsx"],
+    "strategy": "For React Testing Library failures around async UI state, check waitFor/findBy usage and state transitions before editing assertions.",
+    "verificationCommands": ["pnpm test"],
+    "successCount": 5,
+    "failureCount": 2,
+    "confidence": 0.71
+  },
+  {
+    "id": "playbook_pnpm_lockfile_ci",
+    "failureSignature": "javascript:dependency:lockfile:pnpm",
+    "failureType": "dependency_error",
+    "errorCode": "LOCKFILE_OUTDATED",
+    "language": "javascript",
+    "changedFilePatterns": ["package.json", "pnpm-lock.yaml"],
+    "strategy": "When CI fails on pnpm frozen lockfile, verify package.json and pnpm-lock.yaml are updated together.",
+    "verificationCommands": ["pnpm install --frozen-lockfile"],
+    "successCount": 4,
+    "failureCount": 1,
+    "confidence": 0.8
+  },
+  {
+    "id": "playbook_lint_unused_variable",
+    "failureSignature": "javascript:lint:no-unused-vars",
+    "failureType": "lint_error",
+    "errorCode": "no-unused-vars",
+    "language": "javascript",
+    "changedFilePatterns": ["src/**"],
+    "strategy": "For no-unused-vars lint failures, remove unused declarations unless they are part of public API shape.",
+    "verificationCommands": ["pnpm lint"],
+    "successCount": 8,
+    "failureCount": 1,
+    "confidence": 0.89
+  }
+]

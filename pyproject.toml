@@ -1,0 +1,12 @@
+[project]
+name = "cifix-agent"
+version = "0.1.0"
+description = "Python MVP for a multi-agent CI failure repair workflow."
+requires-python = ">=3.9"
+dependencies = []
+
+[project.optional-dependencies]
+vector = ["chromadb>=0.5"]
+
+[project.scripts]
+cifix = "cifix.cli:main"

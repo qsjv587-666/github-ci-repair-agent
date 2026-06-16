@@ -1,0 +1,22 @@
+Run npm test
+
+not ok 1 - submit button is disabled while login is loading
+  ---
+  duration_ms: 3.214
+  location: '/workspace/test/login-button.test.js:5:1'
+  failureType: 'testCodeFailure'
+  error: |-
+    Expected values to be strictly equal:
+
+    false !== true
+  code: 'ERR_ASSERTION'
+  name: 'AssertionError'
+  expected: true
+  actual: false
+  operator: 'strictEqual'
+  stack: |-
+    TestContext.<anonymous> (test/login-button.test.js:8:10)
+    getSubmitButtonState (src/login-button.js:1:17)
+  ...
+
+1 test failed

@@ -1,0 +1,18 @@
+Run npm test
+
+not ok 1 - increment returns the next count
+  ---
+  location: '/workspace/test/counter.test.js:5:1'
+  failureType: 'testCodeFailure'
+  error: |-
+    Expected values to be strictly equal:
+
+    2 !== 3
+  code: 'ERR_ASSERTION'
+  name: 'AssertionError'
+  stack: |-
+    TestContext.<anonymous> (test/counter.test.js:6:10)
+    increment (src/counter.js:1:17)
+  ...
+
+1 test failed

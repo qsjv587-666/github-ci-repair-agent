@@ -1,0 +1,188 @@
+# CIFix Agent MVP
+
+Python implementation of a local runnable MVP for the CI failure self-healing agent described in `docs/project-plan.md`.
+
+The Agent code is under `cifix/`. The `fixtures/*/package.json` files belong to sample projects being repaired; they are not the Agent implementation.
+
+MVP delivery status and demo script: `docs/mvp-status.md`.
+
+Run the fixture demo:
+
+```bash
+python3 -m cifix.cli run \
+  --repo fixtures/react-button-broken \
+  --command "npm test" \
+  --log fixtures/react-button-broken/ci-fail.log \
+  --out artifacts
+```
+
+Run the smoke test:
+
+```bash
+python3 -m unittest discover -s tests
+```
+
+Run local eval:
+
+```bash
+python3 -m cifix.cli eval --cases fixtures --out artifacts/eval
+```
+
+Run eval with ablation baselines:
+
+```bash
+python3 -m cifix.cli eval --cases fixtures --out artifacts/eval-baselines --compare-baselines
+```
+
+Run model-assisted eval:
+
+```bash
+python3 -m cifix.cli eval --cases fixtures --out artifacts/eval-model --use-model
+```
+
+Generate a static dashboard from local artifacts:
+
+```bash
+python3 -m cifix.cli dashboard --artifacts artifacts
+```
+
+Query the repair RAG index directly:
+
+```bash
+python3 -m cifix.cli rag \
+  --query "ERR_ASSERTION disabled false true login button" \
+  --memory-path artifacts/memory/verified-repairs.json
+```
+
+Use ChromaDB as the vector database:
+
+```bash
+python3 -m pip install "chromadb>=0.5"
+
+python3 -m cifix.cli rag \
+  --query "ERR_ASSERTION disabled false true login button" \
+  --memory-path artifacts/memory/verified-repairs.json \
+  --vector-db chroma
+```
+
+Use Qwen / DashScope embeddings with ChromaDB:
+
+```bash
+export DASHSCOPE_API_KEY="your_dashscope_key"
+
+python3 -m cifix.cli rag \
+  --query "ERR_ASSERTION disabled false true login button" \
+  --memory-path artifacts/memory/verified-repairs.json \
+  --vector-db chroma \
+  --embedding-provider dashscope \
+  --embedding-model text-embedding-v4 \
+  --embedding-dimensions 1024
+```
+
+Use Zhipu `embedding-3` with ChromaDB:
+
+```bash
+export ZHIPU_API_KEY="your_zhipu_key"
+
+python3 -m cifix.cli rag \
+  --query "ERR_ASSERTION disabled false true login button" \
+  --memory-path artifacts/memory/verified-repairs.json \
+  --vector-db chroma \
+  --embedding-provider zhipu \
+  --embedding-model embedding-3 \
+  --embedding-dimensions 1024
+```
+
+Current scope:
+
+- Local sandbox execution for a demo repo fixture.
+- GitHub read-only context loading for PR metadata, changed files, workflow jobs, and job logs when a token is provided.
+- Optional Poe model mode for Claude Opus via OpenAI-compatible `/v1/chat/completions`.
+- Failure Fingerprint generation.
+- Hybrid RAG memory retrieval: BM25 keyword retrieval + vector database retrieval + hybrid reranking.
+- ChromaDB vector database backend via `--vector-db chroma`; SQLite brute-force vector scan remains as the zero-dependency fallback.
+- Embedding providers: local hashing fallback, DashScope/Qwen `text-embedding-v4`, and Zhipu `embedding-3`.
+- Verified repair memory written only after tests pass, then indexed into the RAG store.
+- Patch Tournament with at least two candidates.
+- Command safety policy with an allowlist for test/lint/typecheck commands.
+- Structured artifacts: report, trace, patch candidates, selected patch, risk report.
+- Eval runner over multiple CI failure fixtures.
+- Baseline comparison for `full`, `no_memory`, and `single_candidate` eval variants.
+- Static dashboard for run/eval/inspect artifact browsing.
+
+The most reliable zero-credential smoke path is still the local fixture. For real GitHub projects, start with read-only mode. You can paste a PR URL and let CIFix resolve the related failed workflow run/job:
+
+```bash
+python3 -m cifix.cli inspect \
+  --url https://github.com/owner/repo/pull/123 \
+  --token-env GITHUB_TOKEN
+```
+
+`inspect` only reads GitHub metadata/logs and writes local artifacts. To run the full repair workflow, use `run`:
+
+```bash
+python3 -m cifix.cli run \
+  --url https://github.com/owner/repo/pull/123 \
+  --token-env GITHUB_TOKEN
+```
+
+For real projects, CIFix can run a safe dependency setup command before reproducing the failure. In GitHub mode it infers `npm ci`, `pnpm install --frozen-lockfile`, or `yarn install --frozen-lockfile` from lockfiles. You can also pass one explicitly:
+
+```bash
+python3 -m cifix.cli run \
+  --url https://github.com/owner/repo/pull/123 \
+  --setup-command "npm ci" \
+  --token-env GITHUB_TOKEN
+```
+
+You can also paste a specific GitHub Actions job URL when you already know which job failed:
+
+```bash
+python3 -m cifix.cli run \
+  --url https://github.com/owner/repo/actions/runs/456789/job/987654 \
+  --token-env GITHUB_TOKEN
+```
+
+Equivalent flag-based input is still supported:
+
+```bash
+python3 -m cifix.cli run \
+  --repo owner/repo \
+  --pr 123 \
+  --run-id 456789 \
+  --job 987654 \
+  --token-env GITHUB_TOKEN
+```
+
+GitHub mode is read-only by default: it reads PR metadata, changed files, workflow run/job metadata, and failed job logs; then it clones the head commit into a local artifact workspace and writes local patch/report artifacts. It does not comment on GitHub, push branches, create PRs, or merge anything.
+
+Model mode uses environment variables. Do not put API keys in source files. Having `POE_API_KEY` in `.env` only makes the model available; the model is used only when `--use-model` or `CIFIX_USE_MODEL=1` is set.
+
+```bash
+export POE_API_KEY="your_poe_key"
+export POE_MODEL="Claude-Opus-4.6"
+export POE_BASE_URL="https://api.poe.com"
+
+python3 -m cifix.cli run \
+  --repo fixtures/react-button-broken \
+  --command "npm test" \
+  --log fixtures/react-button-broken/ci-fail.log \
+  --use-model
+```
+
+If Poe reports that the model name is unavailable, set `POE_MODEL` to the exact model id shown in your Poe model list.
+
+Current fixture set:
+
+- `react-button-broken`
+- `counter-increment-broken`
+- `todo-filter-broken`
+- `lint-unused-var-broken`
+
+Latest verified local eval:
+
+```text
+cases: 4
+success: 4
+success_rate: 1
+```
