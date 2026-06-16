@@ -2,7 +2,7 @@
 
 ## MVP Scope
 
-This MVP is a read-first CI failure repair workflow for GitHub Actions and local fixtures.
+This MVP is a read-first CI failure repair workflow for GitHub Actions and local fixtures, with explicit opt-in write-back for repositories the user owns.
 
 It supports:
 
@@ -15,14 +15,15 @@ It supports:
 - Verified repair memory written only after tests pass, then indexed for future RAG retrieval.
 - Model-assisted patch generation through Poe / Claude when `--use-model` is set.
 - Patch tournament across candidate repairs.
-- Structured artifacts for report, trace, patch, risk report, PR comment draft, memory write, and GitHub context.
+- Structured artifacts for report, trace, patch, risk report, PR comment draft, memory write, GitHub context, and GitHub write-back status.
+- Optional `--create-pr` write-back: commit the verified patch, push a repair branch, and create a PR when a write-capable `GITHUB_TOKEN` is configured.
 - Eval runner with baseline comparison.
 - Static dashboard over run/eval/inspect artifacts.
 
 It does not support in MVP:
 
-- Writing comments to GitHub.
-- Pushing branches or opening PRs.
+- GitHub write-back without explicit `--create-pr`.
+- GitHub PR creation without a token that has Pull requests write permission.
 - Merging PRs.
 - Running arbitrary shell commands.
 - Claiming support for all languages/build systems.

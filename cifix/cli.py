@@ -68,6 +68,13 @@ def main(argv: list[str] | None = None) -> int:
     print(f"report: {result['paths']['report']}")
     print(f"trace: {result['paths']['trace']}")
     print(f"pr_comment_draft: {result['paths']['prComment']}")
+    if result.get("githubWrite", {}).get("enabled"):
+        github_write = result["githubWrite"]
+        print(f"github_write_status: {github_write.get('status')}")
+        if github_write.get("pullUrl"):
+            print(f"github_pull_request: {github_write['pullUrl']}")
+        elif github_write.get("compareUrl"):
+            print(f"github_compare_url: {github_write['compareUrl']}")
     return 0
 
 
@@ -106,6 +113,7 @@ Usage:
   cifix run --url https://github.com/owner/repo/pull/123 --token-env GITHUB_TOKEN
   cifix run --url https://github.com/owner/repo/actions/runs/456/job/789 --token-env GITHUB_TOKEN
   cifix run --repo owner/repo --pr 123 --run-id <id> --job <id> --token-env GITHUB_TOKEN
+  cifix run --url https://github.com/owner/repo/pull/123 --create-pr --token-env GITHUB_TOKEN [--ssh-key ~/.ssh/github_ci_repair_agent] [--draft-pr]
 
 Model mode:
   POE_API_KEY=... POE_MODEL=Claude-Opus-4.6 python -m cifix.cli run --repo <path> --command "npm test" --log <ci-log> --use-model
@@ -125,7 +133,8 @@ def print_doctor() -> None:
     print(f"EMBEDDING_DIMENSIONS: {embedding_config['dimensions']}")
     print(f"DASHSCOPE_API_KEY: {'set' if os.getenv('DASHSCOPE_API_KEY') else 'missing'}")
     print(f"ZHIPU_API_KEY: {'set' if os.getenv('ZHIPU_API_KEY') or os.getenv('ZAI_API_KEY') else 'missing'}")
-    print("GitHub token env example: --token-env GITHUB_TOKEN")
+    print(f"GITHUB_TOKEN: {'set' if os.getenv('GITHUB_TOKEN') else 'missing'}")
+    print("GitHub write-back example: --create-pr --token-env GITHUB_TOKEN --ssh-key ~/.ssh/github_ci_repair_agent")
 
 
 def load_dot_env(file_path: Path) -> None:

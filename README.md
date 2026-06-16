@@ -105,7 +105,8 @@ Current scope:
 - Verified repair memory written only after tests pass, then indexed into the RAG store.
 - Patch Tournament with at least two candidates.
 - Command safety policy with an allowlist for test/lint/typecheck commands.
-- Structured artifacts: report, trace, patch candidates, selected patch, risk report.
+- Structured artifacts: report, trace, patch candidates, selected patch, risk report, PR comment draft, GitHub write-back result.
+- Optional GitHub write-back via `--create-pr`: commit the verified patch, push a repair branch, and create a PR when `GITHUB_TOKEN` has write permissions.
 - Eval runner over multiple CI failure fixtures.
 - Baseline comparison for `full`, `no_memory`, and `single_candidate` eval variants.
 - Static dashboard for run/eval/inspect artifact browsing.
@@ -154,7 +155,20 @@ python3 -m cifix.cli run \
   --token-env GITHUB_TOKEN
 ```
 
-GitHub mode is read-only by default: it reads PR metadata, changed files, workflow run/job metadata, and failed job logs; then it clones the head commit into a local artifact workspace and writes local patch/report artifacts. It does not comment on GitHub, push branches, create PRs, or merge anything.
+GitHub mode is read-only by default: it reads PR metadata, changed files, workflow run/job metadata, and failed job logs; then it clones the head commit into a local artifact workspace and writes local patch/report artifacts. It does not comment on GitHub, push branches, create PRs, or merge anything unless write-back is explicitly enabled.
+
+For repositories you own, you can enable the write-back path. CIFix commits only the selected patch that has passed verification, pushes a new repair branch, and then creates a PR back into the failing PR branch. If `GITHUB_TOKEN` is missing, it still pushes the branch when SSH is configured and writes a GitHub compare URL into `github-write.json`.
+
+```bash
+python3 -m cifix.cli run \
+  --url https://github.com/owner/repo/pull/123 \
+  --command "npm test" \
+  --token-env GITHUB_TOKEN \
+  --create-pr \
+  --ssh-key ~/.ssh/github_ci_repair_agent
+```
+
+For automatic PR creation, use a fine-grained GitHub token limited to the target repo with Contents read/write and Pull requests read/write permissions. For read-only inspect/run, Contents read, Actions read, and Pull requests read are enough.
 
 Model mode uses environment variables. Do not put API keys in source files. Having `POE_API_KEY` in `.env` only makes the model available; the model is used only when `--use-model` or `CIFIX_USE_MODEL=1` is set.
 

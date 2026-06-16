@@ -1,6 +1,8 @@
 from __future__ import annotations
 
 import json
+import os
+import subprocess
 import tempfile
 import unittest
 from pathlib import Path
@@ -8,6 +10,7 @@ from unittest.mock import patch
 
 from cifix.dashboard import generate_dashboard
 from cifix.eval import run_eval
+from cifix.agents.github_writer_agent import build_repair_branch, run_github_writer_agent
 from cifix.github import load_github_context, parse_github_url
 from cifix.inspect import inspect_github
 from cifix.rag import DashScopeEmbeddingProvider, HybridRepairRAG, ZhipuEmbeddingProvider, build_repair_query, create_embedding_provider
@@ -83,8 +86,8 @@ class CifixSmokeTest(unittest.TestCase):
                 return {
                     "title": "Fix button state",
                     "html_url": "https://github.com/acme/widget/pull/7",
-                    "head": {"sha": "abc123", "repo": {"clone_url": "https://github.com/fork/widget.git"}},
-                    "base": {"sha": "base123"},
+                    "head": {"sha": "abc123", "ref": "feature/fix", "repo": {"clone_url": "https://github.com/fork/widget.git", "full_name": "fork/widget"}},
+                    "base": {"sha": "base123", "ref": "main", "repo": {"full_name": "acme/widget"}},
                 }
             if path == "/repos/acme/widget/pulls/7/files":
                 return [{"filename": "src/button.js"}]
@@ -120,8 +123,49 @@ class CifixSmokeTest(unittest.TestCase):
         self.assertEqual(context["runId"], 101)
         self.assertEqual(context["jobId"], 202)
         self.assertEqual(context["cloneUrl"], "https://github.com/fork/widget.git")
+        self.assertEqual(context["headRef"], "feature/fix")
+        self.assertEqual(context["baseRef"], "main")
+        self.assertEqual(context["headRepoFullName"], "fork/widget")
         self.assertEqual(context["changedFiles"], ["src/button.js"])
         self.assertEqual(context["rawLog"], "ERR_ASSERTION stack")
+
+    def test_github_writer_pushes_branch_and_returns_compare_url_without_token(self) -> None:
+        calls: list[list[str]] = []
+
+        def fake_run_git(args: list[str], cwd: Path, ssh_key: Path | None = None):
+            calls.append(args)
+            stdout = " src/login-button.js | 2 +-\n" if args == ["diff", "--stat"] else ""
+            return subprocess.CompletedProcess(["git", *args], 0, stdout=stdout, stderr="")
+
+        selected = {
+            "id": "patch_source_loading_disabled",
+            "verification": {"passed": True, "exitCode": 0},
+            "riskTags": ["source-change"],
+        }
+        context = {
+            "owner": "acme",
+            "repo": "widget",
+            "pullNumber": 7,
+            "pullHtmlUrl": "https://github.com/acme/widget/pull/7",
+            "headRef": "feature/failing-ci",
+            "runHtmlUrl": "https://github.com/acme/widget/actions/runs/1",
+        }
+        with patch.dict(os.environ, {"GITHUB_TOKEN": ""}), patch("cifix.agents.github_writer_agent.run_git", side_effect=fake_run_git):
+            result = run_github_writer_agent(
+                flags={"create-pr": True},
+                workspace_dir=Path("/tmp/workspace"),
+                github_context=context,
+                selected=selected,
+                fingerprint={"failureType": "test_assertion_failure", "errorCode": "ERR_ASSERTION"},
+                command="npm test",
+                run_id="run_20260616000000_abc123ef",
+                trace=[],
+            )
+
+        self.assertEqual(result["status"], "pushed_no_pr")
+        self.assertEqual(result["branch"], build_repair_branch(pull_number=7, run_id="run_20260616000000_abc123ef"))
+        self.assertIn("compare/feature%2Ffailing-ci...ci-repair%2Fpr-7-", result["compareUrl"])
+        self.assertIn(["push", "-u", "origin", result["branch"], "--force-with-lease"], calls)
 
     def test_parse_github_actions_job_url(self) -> None:
         parsed = parse_github_url("https://github.com/acme/widget/actions/runs/101/job/202")

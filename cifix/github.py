@@ -9,9 +9,16 @@ GITHUB_API = "https://api.github.com"
 
 
 def github_json(path: str, token: str | None) -> Any:
+    return github_request_json("GET", path, token)
+
+
+def github_request_json(method: str, path: str, token: str | None, body: dict[str, Any] | None = None) -> Any:
+    data = json.dumps(body).encode() if body is not None else None
     request = urllib.request.Request(
         f"{GITHUB_API}{path}",
         headers=_headers(token),
+        method=method,
+        data=data,
     )
     with urllib.request.urlopen(request, timeout=30) as response:
         return json.loads(response.read().decode())
@@ -62,6 +69,10 @@ def load_github_context(*, pr_url: str | None, owner_repo: str | None, pull_numb
         "pullTitle": (pull or {}).get("title"),
         "pullHtmlUrl": (pull or {}).get("html_url"),
         "cloneUrl": pull.get("head", {}).get("repo", {}).get("clone_url") if pull else f"https://github.com/{owner}/{repo}.git",
+        "headRef": (pull or {}).get("head", {}).get("ref"),
+        "baseRef": (pull or {}).get("base", {}).get("ref"),
+        "headRepoFullName": (pull or {}).get("head", {}).get("repo", {}).get("full_name"),
+        "baseRepoFullName": (pull or {}).get("base", {}).get("repo", {}).get("full_name"),
         "headSha": (pull or {}).get("head", {}).get("sha") or (workflow_run or {}).get("head_sha"),
         "baseSha": (pull or {}).get("base", {}).get("sha"),
         "changedFiles": [file["filename"] for file in files],
@@ -144,6 +155,7 @@ def public_github_context(context: dict[str, Any] | None) -> dict[str, Any] | No
 def _headers(token: str | None) -> dict[str, str]:
     headers = {
         "Accept": "application/vnd.github+json",
+        "Content-Type": "application/json",
         "X-GitHub-Api-Version": "2022-11-28",
         "User-Agent": "cifix-agent",
     }

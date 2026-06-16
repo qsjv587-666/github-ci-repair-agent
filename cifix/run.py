@@ -15,6 +15,7 @@ from .agents.reproducer_agent import run_reproducer_agent
 from .agents.review_agent import run_review_agent
 from .agents.setup_agent import run_setup_agent
 from .agents.test_agent import run_test_agent
+from .agents.github_writer_agent import run_github_writer_agent
 from .github import load_github_context
 from .core.trace import step
 from .rag import embedding_config_from_flags
@@ -39,7 +40,7 @@ def run_cifix(flags: dict[str, Any]) -> dict[str, Any]:
         pull_number=flags.get("pr"),
         run_id=flags.get("run-id"),
         job_id=flags.get("job"),
-        token=os.getenv(flags["token-env"]) if flags.get("token-env") else None,
+        token=os.getenv(flags.get("token-env") or "GITHUB_TOKEN"),
     )
     prepare_workspace(flags, github_context, workspace_dir, trace)
     command = flags.get("command") or infer_command(workspace_dir)
@@ -67,6 +68,16 @@ def run_cifix(flags: dict[str, Any]) -> dict[str, Any]:
         if flags.get("no-memory")
         else run_memory_writer_agent(memory_path=memory_path, fingerprint=fingerprint, selected=selected, command=command, trace=trace)
     )
+    github_write = run_github_writer_agent(
+        flags=flags,
+        workspace_dir=workspace_dir,
+        github_context=github_context,
+        selected=selected,
+        fingerprint=fingerprint,
+        command=command,
+        run_id=run_id,
+        trace=trace,
+    )
 
     run_report_writer_agent(
         run_dir=run_dir,
@@ -80,6 +91,7 @@ def run_cifix(flags: dict[str, Any]) -> dict[str, Any]:
         tournament=tournament,
         selected=selected,
         memory_write=memory_write,
+        github_write=github_write,
         github_context=github_context,
         trace=trace,
         started_at=started_at,
@@ -92,5 +104,7 @@ def run_cifix(flags: dict[str, Any]) -> dict[str, Any]:
             "report": str(run_dir / "report.md"),
             "trace": str(run_dir / "trace.json"),
             "prComment": str(run_dir / "pr-comment.md"),
+            "githubWrite": str(run_dir / "github-write.json"),
         },
+        "githubWrite": github_write,
     }

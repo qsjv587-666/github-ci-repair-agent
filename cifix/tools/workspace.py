@@ -34,7 +34,10 @@ def prepare_workspace(flags: dict[str, Any], github_context: dict[str, Any] | No
     if repo and not repo_is_github_slug:
         copy_repo(source_repo, workspace_dir)
 
-    init_git(workspace_dir)
+    if repo and not repo_is_github_slug:
+        init_git(workspace_dir)
+    else:
+        ensure_git_identity(workspace_dir)
     return workspace_dir
 
 
@@ -62,10 +65,16 @@ def copy_repo(source: Path, destination: Path) -> None:
 
 def init_git(cwd: Path) -> None:
     git(["init"], cwd=cwd)
+    ensure_git_identity(cwd)
+    git(["add", "."], cwd=cwd)
+    status = git(["status", "--porcelain"], cwd=cwd).stdout
+    if status.strip():
+        git(["commit", "-m", "baseline"], cwd=cwd)
+
+
+def ensure_git_identity(cwd: Path) -> None:
     git(["config", "user.email", "cifix@example.local"], cwd=cwd)
     git(["config", "user.name", "CIFix Agent"], cwd=cwd)
-    git(["add", "."], cwd=cwd)
-    git(["commit", "-m", "baseline"], cwd=cwd)
 
 
 def read_log(log_path: str | None) -> str:

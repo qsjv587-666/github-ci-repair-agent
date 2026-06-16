@@ -16,6 +16,7 @@ def run_report_writer_agent(**kwargs: Any) -> None:
     tournament = kwargs["tournament"]
     selected = kwargs["selected"]
     memory_write = kwargs["memory_write"]
+    github_write = kwargs.get("github_write", {"enabled": False, "status": "skipped"})
     github_context = kwargs.get("github_context")
     command = kwargs["command"]
     setup_result = kwargs["setup_result"]
@@ -32,6 +33,7 @@ def run_report_writer_agent(**kwargs: Any) -> None:
         (run_dir / "setup.json").write_text(json_text(summarize_command(setup_result)))
     (run_dir / "repair-playbook-hits.json").write_text(json_text(playbook_hits))
     (run_dir / "memory-write.json").write_text(json_text(memory_write))
+    (run_dir / "github-write.json").write_text(json_text(github_write))
     (run_dir / "model-diagnosis.json").write_text(json_text(model_diagnosis))
     (run_dir / "verification.json").write_text(
         json_text(
@@ -46,10 +48,10 @@ def run_report_writer_agent(**kwargs: Any) -> None:
     (run_dir / "patch.diff").write_text(selected.get("diff") if selected else "# No patch selected\n")
     (run_dir / "risk-report.md").write_text(render_risk_report(selected, tournament))
     (run_dir / "pr-comment.md").write_text(render_pr_comment(fingerprint, selected, command))
-    (run_dir / "report.md").write_text(render_report(run_id, started_at, fingerprint, playbook_hits, reproduction, model_diagnosis, tournament, selected, command, setup_result, memory_write, github_context))
+    (run_dir / "report.md").write_text(render_report(run_id, started_at, fingerprint, playbook_hits, reproduction, model_diagnosis, tournament, selected, command, setup_result, memory_write, github_write, github_context))
 
 
-def render_report(run_id: str, started_at: str, fingerprint: dict[str, Any], playbook_hits: list[dict[str, Any]], reproduction: dict[str, Any], model_diagnosis: dict[str, Any], tournament: dict[str, Any], selected: dict[str, Any] | None, command: str, setup_result: dict[str, Any] | None, memory_write: dict[str, Any], github_context: dict[str, Any] | None) -> str:
+def render_report(run_id: str, started_at: str, fingerprint: dict[str, Any], playbook_hits: list[dict[str, Any]], reproduction: dict[str, Any], model_diagnosis: dict[str, Any], tournament: dict[str, Any], selected: dict[str, Any] | None, command: str, setup_result: dict[str, Any] | None, memory_write: dict[str, Any], github_write: dict[str, Any], github_context: dict[str, Any] | None) -> str:
     playbook_lines = "\n".join(render_rag_hit(hit) for hit in playbook_hits) or "- No RAG memory matched."
     tournament_lines = "\n".join(f"{i + 1}. {c['id']}\n   - passed: {c['verification']['passed']}\n   - risk: {c['riskScore']}\n   - ranking: {c['rankingScore']}\n   - hypothesis: {c['hypothesis']}" for i, c in enumerate(tournament["candidates"]))
     github_lines = render_github_context(github_context)
@@ -94,6 +96,11 @@ def render_report(run_id: str, started_at: str, fingerprint: dict[str, Any], pla
 
 ```json
 {json_text(memory_write)}```
+
+## GitHub Write Back
+
+```json
+{json_text(github_write)}```
 """
 
 

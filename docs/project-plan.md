@@ -316,7 +316,7 @@ cifix eval --cases ./eval-cases/typescript-node --baseline all
 
 ### 5.0.1 真实 GitHub MVP 输入输出契约
 
-第一版必须支持真实 GitHub 项目，但采用“只读拉取 + 本地修复 + 草稿输出”的安全模式。
+第一版必须支持真实 GitHub 项目，默认采用“只读拉取 + 本地修复 + 草稿输出”的安全模式；对自己有权限的仓库，可以显式开启写回模式。
 
 #### 必需输入
 
@@ -348,6 +348,7 @@ https://github.com/owner/repo/actions/runs/456789/job/987654
   - 私有仓库：需要仓库 contents read、actions read、pull requests read 权限。
   - 写 PR 评论：需要 issues / pull requests 写权限，并且必须显式开启写回。
   - 推送修复分支：需要 contents write 权限，并且第一版只建议对自己的 fork 开启。
+  - 自动创建 PR：需要 pull requests write 权限，并且必须显式开启 `--create-pr`。
 - 可选 `failingCommand`：如果系统不能从 CI 日志中推断复现命令，允许用户手动指定。
 - 可选 `baseRef/headRef`：当 PR 信息不可用时手动指定。
 
@@ -387,9 +388,10 @@ artifacts/<run_id>/
   verification.json      # 测试命令和结果
   risk-report.md
   pr-comment.md          # 可复制到 GitHub PR 的评论草稿
+  github-write.json      # 可选写回状态、repair branch、PR URL 或 compare URL
 ```
 
-第一版默认不写回 GitHub。只有用户显式开启 `--write-comment` 或 `--create-draft-pr`，并提供相应权限 token，系统才允许写操作。
+第一版默认不写回 GitHub。只有用户显式开启 `--create-pr`，并提供相应权限 token 或 SSH key，系统才允许写操作。写回路径只提交已验证通过的推荐 patch，不自动 merge。
 
 ### 5.0.2 权限模式
 
