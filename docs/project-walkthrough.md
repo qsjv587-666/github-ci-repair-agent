@@ -2,7 +2,7 @@
 
 目标：快速讲清楚这个项目做了什么、一次 CI 修复任务怎么跑、多 Agent 如何协作、Hybrid RAG 和修复记忆怎么工作、GitHub 写回闭环怎么落地，以及面试/简历中应该怎么表述。
 
-这份文档按当前代码事实整理，不把还没做的 webhook、自动 merge、复杂线上服务化包装成已经完成的能力。
+这份文档按当前代码事实整理，不把还没做的 webhook、复杂线上服务化包装成已经完成的能力；自动 merge 已实现为默认关闭的高权限门禁能力。
 
 ## 1. 项目一句话
 
@@ -17,7 +17,7 @@
 - 把 CI 失败从一堆分散日志变成结构化 failure fingerprint。
 - 把历史修复经验做成可检索的 repair memory。
 - 用多候选 patch + 真实测试验证替代单次盲改。
-- 把修复结果写回 GitHub，形成可审查、可回滚的 PR 闭环。
+- 把修复结果写回 GitHub，形成可审查、可回滚的 PR 闭环；低风险场景下可以显式开启自动 merge 修复 PR。
 - 用 eval / dashboard / trace 让系统效果可以复盘和展示。
 
 ## 2. 当前已经跑通的真实闭环
@@ -57,6 +57,7 @@
 | counter increment assertion | #3 | #4 | source PR CI success |
 | todo active filter assertion | #5 | #6 | source PR CI success |
 | lint unused variable | #7 | #8 | source PR CI success |
+| gated auto-merge counter demo | #9 | #11 | repair PR auto-merged, source PR CI success |
 
 这说明当前项目不是只在本地 fixture 上跑通，而是已经完成真实 GitHub 仓库里的多类“失败 PR -> 修复 PR -> 合并修复 -> 原 PR CI 变绿”闭环。
 
@@ -77,7 +78,7 @@
 - `cifix/agents/test_agent.py`：逐个应用候选 patch 并运行测试验证。
 - `cifix/agents/review_agent.py`：排序候选 patch，选择最小可行修复。
 - `cifix/agents/memory_writer_agent.py`：把验证通过的修复写入历史记忆。
-- `cifix/agents/github_writer_agent.py`：在开启 `--create-pr` 时推修复分支并创建 PR。
+- `cifix/agents/github_writer_agent.py`：在开启 `--create-pr` 时推修复分支并创建 PR；在开启 `--auto-merge-repair-pr` 且通过门禁时自动 merge 修复 PR。
 - `cifix/agents/report_writer_agent.py`：输出报告、trace、patch、验证结果等 artifacts。
 
 支撑模块：
@@ -177,7 +178,7 @@ artifacts/run_<timestamp>_<id>/
   risk-report.md               # 风险说明
   pr-comment.md                # 可复制到 PR 的评论草稿
   github-context.json          # GitHub PR / CI 上下文
-  github-write.json            # 写回结果，包含 repair branch / PR URL
+  github-write.json            # 写回结果，包含 repair branch / PR URL / auto-merge 结果
   trace.json                   # 所有 agent 的执行轨迹
 ```
 
@@ -499,6 +500,33 @@ ci-repair/pr-3-xxx -> fail/counter-increment
 
 如果没有 `GITHUB_TOKEN`，系统仍可以在 SSH 可用时推送 repair branch，并在 `github-write.json` 里给出 compare URL；如果 token 可用，则直接创建 PR。
 
+### 13.1 自动 merge 修复 PR
+
+自动 merge 默认关闭。只有显式传入：
+
+```bash
+--auto-merge-repair-pr
+```
+
+系统才会尝试把修复 PR 合回源失败分支。
+
+自动 merge 的门禁：
+
+- 修复 PR 必须是本次 agent 创建的。
+- 修复 PR 的 base 必须是源失败 PR 的 head branch，不能是 `main`。
+- selected patch 本地验证必须通过。
+- 如果仓库会给修复 PR 跑 CI，则修复 PR 的 CI 必须 `success`。
+- 如果仓库没有给“修复 PR -> 源失败分支”这类 PR 跑 CI，系统会短暂等待 checks 出现，随后记录 fallback，只在本地验证通过、patch 低风险、PR 可合并时继续 merge，并用源 PR 合并后的 CI rerun 作为最终验收。需要严格要求修复 PR checks 时，可以传 `--require-repair-ci`。
+- patch 不能改测试文件。
+- patch 不能带 `test-change`、`possible-overfit`、`noop` 风险标签。
+- diff 改动行数默认不能超过 30 行。
+
+通过门禁后，系统调用 GitHub merge API 合并修复 PR。合并完成后，如果没有传 `--no-wait-source-ci`，系统还会等待源失败 PR 的最新 head commit 重新跑 CI，并把结果写进 `github-write.json` 的 `autoMerge.sourceStatus`。
+
+这项能力的定位不是“无人审查自动合 main”，而是：
+
+> 对低风险、已验证、CI 通过的修复 PR，自动合回源失败分支，让源 PR 重新触发 CI，从而形成更完整的自愈闭环。
+
 ## 14. Report、Trace 和 Dashboard
 
 报告输出在 `cifix/agents/report_writer_agent.py`。
@@ -509,7 +537,7 @@ ci-repair/pr-3-xxx -> fail/counter-increment
 - `trace.json`：机器可读的 agent 执行轨迹。
 - `verification.json`：复现和所有候选 patch 的测试结果。
 - `patch.diff`：最终推荐 patch。
-- `github-write.json`：写回状态、repair branch、PR URL。
+- `github-write.json`：写回状态、repair branch、PR URL、可选 auto-merge 结果。
 
 Dashboard 在 `cifix/dashboard.py`，它会扫描 artifacts 下的 run、eval、inspect 结果，生成静态 HTML。
 
@@ -598,7 +626,7 @@ python3 -m cifix.cli eval \
 
 - 必须显式 `--create-pr`。
 - 只有验证通过的 selected patch 才会写回。
-- 不自动 merge。
+- 默认不自动 merge；只有显式 `--auto-merge-repair-pr` 且通过门禁才合并修复 PR。
 - 不直接推 main。
 
 ## 17. 和 Codex / Claude 的区别
@@ -639,6 +667,7 @@ python3 -m cifix.cli eval \
 - 默认不会自动 merge，merge 仍由人完成。
 - DashScope embedding 如果账号未开通对应模型权限，需要用 `hash` provider 或换可用 embedding。
 - GitHub 写回需要用户配置 token 和 SSH key。
+- 自动 merge 只适合个人仓库或明确授权的低风险修复场景，默认关闭。
 
 这些限制不影响 MVP 价值，反而说明你知道项目边界，没有夸大。
 
@@ -670,7 +699,7 @@ python3 -m cifix.cli eval \
    - 命令 allowlist。
    - 默认只读。
    - 显式 `--create-pr`。
-   - 不自动 merge。
+   - 自动 merge 默认关闭，开启后也必须通过 CI、风险标签、diff 范围等门禁。
 
 ## 20. 快速运行命令
 
@@ -709,6 +738,22 @@ python3 -m cifix.cli run \
   --embedding-provider hash \
   --use-model \
   --create-pr \
+  --token-env GITHUB_TOKEN \
+  --ssh-key ~/.ssh/github_ci_repair_agent
+```
+
+真实 GitHub 修复、创建 PR，并在门禁通过后自动 merge 修复 PR：
+
+```bash
+python3 -m cifix.cli run \
+  --url https://github.com/owner/repo/pull/123 \
+  --command "npm test" \
+  --out artifacts \
+  --vector-db chroma \
+  --embedding-provider hash \
+  --use-model \
+  --create-pr \
+  --auto-merge-repair-pr \
   --token-env GITHUB_TOKEN \
   --ssh-key ~/.ssh/github_ci_repair_agent
 ```

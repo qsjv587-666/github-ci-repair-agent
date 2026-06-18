@@ -10,7 +10,7 @@ from unittest.mock import patch
 
 from cifix.dashboard import generate_dashboard
 from cifix.eval import run_eval
-from cifix.agents.github_writer_agent import build_repair_branch, run_github_writer_agent
+from cifix.agents.github_writer_agent import auto_merge_gate_error, build_repair_branch, run_github_writer_agent
 from cifix.github import load_github_context, parse_github_url
 from cifix.inspect import inspect_github
 from cifix.rag import DashScopeEmbeddingProvider, HybridRepairRAG, ZhipuEmbeddingProvider, build_repair_query, create_embedding_provider
@@ -167,6 +167,74 @@ class CifixSmokeTest(unittest.TestCase):
         self.assertEqual(result["branch"], build_repair_branch(pull_number=7, run_id="run_20260616000000_abc123ef"))
         self.assertIn("compare/feature%2Ffailing-ci...ci-repair%2Fpr-7-", result["compareUrl"])
         self.assertIn(["push", "-u", "origin", result["branch"], "--force-with-lease"], calls)
+
+    def test_github_writer_auto_merges_low_risk_repair_pr(self) -> None:
+        def fake_run_git(args: list[str], cwd: Path, ssh_key: Path | None = None):
+            stdout = " src/login-button.js | 2 +-\n" if args == ["diff", "--stat"] else ""
+            return subprocess.CompletedProcess(["git", *args], 0, stdout=stdout, stderr="")
+
+        def fake_github(method: str, path: str, token: str | None, body: dict | None = None):
+            self.assertEqual(token, "token")
+            if method == "POST" and path == "/repos/acme/widget/pulls":
+                return {"number": 8, "html_url": "https://github.com/acme/widget/pull/8"}
+            if method == "PUT" and path == "/repos/acme/widget/pulls/8/merge":
+                return {"merged": True, "sha": "merge123", "message": "Pull Request successfully merged"}
+            raise AssertionError(f"{method} {path}")
+
+        selected = {
+            "id": "patch_source_loading_disabled",
+            "verification": {"passed": True, "exitCode": 0},
+            "riskTags": ["source-change"],
+            "edits": [{"file": "src/login-button.js", "from": "disabled: false", "to": "disabled: Boolean(loading)"}],
+            "diff": "diff --git a/src/login-button.js b/src/login-button.js\n-    disabled: false\n+    disabled: Boolean(loading)\n",
+        }
+        context = {
+            "owner": "acme",
+            "repo": "widget",
+            "pullNumber": 7,
+            "pullHtmlUrl": "https://github.com/acme/widget/pull/7",
+            "headRef": "feature/failing-ci",
+            "baseRef": "main",
+            "headSha": "oldsha",
+            "runHtmlUrl": "https://github.com/acme/widget/actions/runs/1",
+        }
+        repair_status = {"ciState": "missing", "mergeable": True, "pullUrl": "https://github.com/acme/widget/pull/8"}
+        source_status = {"ciState": "success", "pullUrl": "https://github.com/acme/widget/pull/7", "headSha": "newsha"}
+        with (
+            patch.dict(os.environ, {"GITHUB_TOKEN": "token"}),
+            patch("cifix.agents.github_writer_agent.run_git", side_effect=fake_run_git),
+            patch("cifix.agents.github_writer_agent.github_request_json", side_effect=fake_github),
+            patch("cifix.agents.github_writer_agent.wait_for_pull_ci_success", side_effect=[repair_status, source_status]),
+        ):
+            result = run_github_writer_agent(
+                flags={"create-pr": True, "auto-merge-repair-pr": True},
+                workspace_dir=Path("/tmp/workspace"),
+                github_context=context,
+                selected=selected,
+                fingerprint={"failureType": "test_assertion_failure", "errorCode": "ERR_ASSERTION"},
+                command="npm test",
+                run_id="run_20260616000000_abc123ef",
+                trace=[],
+            )
+
+        self.assertEqual(result["status"], "pr_created")
+        self.assertEqual(result["autoMerge"]["status"], "merged")
+        self.assertIn("missing repair PR checks", result["autoMerge"]["repairCiFallback"])
+        self.assertEqual(result["autoMerge"]["sourceStatus"]["ciState"], "success")
+
+    def test_auto_merge_gate_blocks_test_changes(self) -> None:
+        reason = auto_merge_gate_error(
+            flags={},
+            repair_base_ref="feature/failing-ci",
+            source_head_ref="feature/failing-ci",
+            source_base_ref="main",
+            selected={
+                "riskTags": ["test-change"],
+                "edits": [{"file": "test/login-button.test.js"}],
+                "diff": "-assert.equal(a, b)\n+assert.ok(a)\n",
+            },
+        )
+        self.assertIn("blocked risk tags", reason or "")
 
     def test_parse_github_actions_job_url(self) -> None:
         parsed = parse_github_url("https://github.com/acme/widget/actions/runs/101/job/202")

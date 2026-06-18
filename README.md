@@ -178,6 +178,20 @@ python3 -m cifix.cli run \
   --ssh-key ~/.ssh/github_ci_repair_agent
 ```
 
+For low-risk repairs in repositories you own, the repair PR can also be auto-merged back into the failing source branch after gated checks pass:
+
+```bash
+python3 -m cifix.cli run \
+  --url https://github.com/owner/repo/pull/123 \
+  --command "npm test" \
+  --token-env GITHUB_TOKEN \
+  --create-pr \
+  --auto-merge-repair-pr \
+  --ssh-key ~/.ssh/github_ci_repair_agent
+```
+
+Auto-merge is gated: the repair PR must target the source PR head branch, the selected patch must pass local verification, repair PR CI must pass when the repository triggers checks for that repair PR, the patch must not touch tests or carry overfit/noop risk tags, and the diff must stay under the configured line threshold. If the repository does not run checks for PRs targeting feature branches, CIFix waits briefly for checks to appear, records that fallback, and relies on local verification plus the source PR CI rerun after merge. Use `--require-repair-ci` to force strict repair PR checks.
+
 For automatic PR creation, use a fine-grained GitHub token limited to the target repo with Contents read/write and Pull requests read/write permissions. For read-only inspect/run, Contents read, Actions read, and Pull requests read are enough.
 
 Model mode uses environment variables. Do not put API keys in source files. Having `POE_API_KEY` in `.env` only makes the model available; the model is used only when `--use-model` or `CIFIX_USE_MODEL=1` is set.

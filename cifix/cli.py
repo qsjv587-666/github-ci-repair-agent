@@ -87,6 +87,11 @@ def main(argv: list[str] | None = None) -> int:
             print(f"github_pull_request: {github_write['pullUrl']}")
         elif github_write.get("compareUrl"):
             print(f"github_compare_url: {github_write['compareUrl']}")
+        if github_write.get("autoMerge", {}).get("enabled"):
+            auto_merge = github_write["autoMerge"]
+            print(f"auto_merge_status: {auto_merge.get('status')}")
+            if auto_merge.get("sourceStatus", {}).get("pullUrl"):
+                print(f"source_pull_request: {auto_merge['sourceStatus']['pullUrl']}")
     return 0
 
 
@@ -126,7 +131,7 @@ Usage:
   cifix run --url https://github.com/owner/repo/pull/123 --token-env GITHUB_TOKEN
   cifix run --url https://github.com/owner/repo/actions/runs/456/job/789 --token-env GITHUB_TOKEN
   cifix run --repo owner/repo --pr 123 --run-id <id> --job <id> --token-env GITHUB_TOKEN
-  cifix run --url https://github.com/owner/repo/pull/123 --create-pr --token-env GITHUB_TOKEN [--ssh-key ~/.ssh/github_ci_repair_agent] [--draft-pr]
+  cifix run --url https://github.com/owner/repo/pull/123 --create-pr --token-env GITHUB_TOKEN [--ssh-key ~/.ssh/github_ci_repair_agent] [--draft-pr] [--auto-merge-repair-pr] [--require-repair-ci]
 
 Model mode:
   POE_API_KEY=... POE_MODEL=Claude-Opus-4.6 python -m cifix.cli run --repo <path> --command "npm test" --log <ci-log> --use-model

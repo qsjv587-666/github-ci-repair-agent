@@ -54,6 +54,8 @@ def discover_run_artifacts(root: Path) -> list[dict[str, Any]]:
                 "repairPullNumber": github_write.get("pullNumber"),
                 "repairPullUrl": github_write.get("pullUrl"),
                 "repairBranch": github_write.get("branch"),
+                "autoMergeStatus": (github_write.get("autoMerge") or {}).get("status"),
+                "sourceCiAfterMerge": ((github_write.get("autoMerge") or {}).get("sourceStatus") or {}).get("ciState"),
                 "candidateCount": len(candidates),
                 "passedCandidates": len([item for item in candidates if item.get("verification", {}).get("passed")]),
                 "bestCandidate": candidates[0].get("id") if candidates else None,
@@ -262,7 +264,13 @@ def render_repair_cell(run: dict[str, Any]) -> str:
     status = run.get("repairStatus") or "skipped"
     branch = f"<br><span class=\"muted mono\">{escape(str(run.get('repairBranch') or ''))}</span>" if run.get("repairBranch") else ""
     repair_label = f"repair PR #{run.get('repairPullNumber')}"
-    return f"<span class=\"pill {status_class(status)}\">{escape(str(status))}</span><br>{external_link(run.get('repairPullUrl'), repair_label)}{branch}"
+    auto_merge = ""
+    if run.get("autoMergeStatus"):
+        auto_merge = f"<br><span class=\"muted\">auto-merge: {escape(str(run.get('autoMergeStatus')))}"
+        if run.get("sourceCiAfterMerge"):
+            auto_merge += f" / source CI: {escape(str(run.get('sourceCiAfterMerge')))}"
+        auto_merge += "</span>"
+    return f"<span class=\"pill {status_class(status)}\">{escape(str(status))}</span><br>{external_link(run.get('repairPullUrl'), repair_label)}{branch}{auto_merge}"
 
 
 def render_latest_run(run: dict[str, Any] | None) -> str:
