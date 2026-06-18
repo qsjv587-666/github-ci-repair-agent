@@ -4,6 +4,8 @@ Python implementation of a local runnable MVP for the CI failure self-healing ag
 
 The Agent code is under `cifix/`. The `fixtures/*/package.json` files belong to sample projects being repaired; they are not the Agent implementation.
 
+Full project walkthrough: `docs/project-walkthrough.md`.
+
 MVP delivery status and demo script: `docs/mvp-status.md`.
 
 Run the fixture demo:
