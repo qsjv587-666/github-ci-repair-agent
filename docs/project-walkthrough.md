@@ -49,7 +49,16 @@
 - Agent 自动创建的修复 PR：`https://github.com/qsjv587-666/ci-repair-agent-demo/pull/4`
 - 修复后成功 CI run：`https://github.com/qsjv587-666/ci-repair-agent-demo/actions/runs/27607027519`
 
-这说明当前项目不是只在本地 fixture 上跑通，而是已经完成真实 GitHub 仓库里的“失败 PR -> 修复 PR -> 合并修复 -> 原 PR CI 变绿”闭环。
+目前真实 GitHub demo 已覆盖 4 类失败：
+
+| 场景 | 源失败 PR | Agent 修复 PR | 修复后状态 |
+|---|---:|---:|---|
+| login button disabled state | #1 | #2 | source PR CI success |
+| counter increment assertion | #3 | #4 | source PR CI success |
+| todo active filter assertion | #5 | #6 | source PR CI success |
+| lint unused variable | #7 | #8 | source PR CI success |
+
+这说明当前项目不是只在本地 fixture 上跑通，而是已经完成真实 GitHub 仓库里的多类“失败 PR -> 修复 PR -> 合并修复 -> 原 PR CI 变绿”闭环。
 
 ## 3. 代码大结构
 
@@ -509,8 +518,11 @@ Dashboard 在 `cifix/dashboard.py`，它会扫描 artifacts 下的 run、eval、
 - run 数量。
 - 成功 run 数。
 - eval 报告。
-- 最近 run 的失败类型、项目、模型、memory 是否写入。
-- patch / trace / comment 链接。
+- 最近 run 的失败类型、项目、源 PR、修复 PR。
+- Patch Tournament 的候选数量、通过数量、最佳候选和风险分数。
+- Top RAG evidence 的来源、分数和策略摘要。
+- GitHub PR status snapshot，展示源 PR 的最新 CI 状态和 workflow run 链接。
+- patch / trace / RAG / GitHub write-back 链接。
 
 这部分的价值是把“跑过一次命令”变成“可展示、可复盘的系统记录”。
 
@@ -652,7 +664,7 @@ python3 -m cifix.cli eval \
 
 5. **落地验证**
    - 本地 fixture 4/4。
-   - 真实 GitHub demo：#3 失败，agent 创建 #4，合并 #4 后 #3 CI success。
+   - 真实 GitHub demo：#1/#3/#5/#7 四类失败，agent 创建 #2/#4/#6/#8 修复 PR，合并修复 PR 后源 PR CI success。
 
 6. **工程边界**
    - 命令 allowlist。

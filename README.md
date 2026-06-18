@@ -48,6 +48,14 @@ Generate a static dashboard from local artifacts:
 python3 -m cifix.cli dashboard --artifacts artifacts
 ```
 
+Capture the latest GitHub PR / CI status as an artifact:
+
+```bash
+python3 -m cifix.cli status \
+  --url https://github.com/owner/repo/pull/123 \
+  --token-env GITHUB_TOKEN
+```
+
 Query the repair RAG index directly:
 
 ```bash

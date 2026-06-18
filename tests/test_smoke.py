@@ -15,6 +15,7 @@ from cifix.github import load_github_context, parse_github_url
 from cifix.inspect import inspect_github
 from cifix.rag import DashScopeEmbeddingProvider, HybridRepairRAG, ZhipuEmbeddingProvider, build_repair_query, create_embedding_provider
 from cifix.run import run_cifix
+from cifix.status import inspect_status
 from cifix.tools.command import run_command
 from cifix.tools.workspace import infer_setup_command
 
@@ -212,6 +213,37 @@ class CifixSmokeTest(unittest.TestCase):
             self.assertIn("CIFix Agent Dashboard", html)
             self.assertIn("react-button-broken", html)
             self.assertIn("latest eval success rate", html)
+            self.assertIn("Top RAG Evidence", html)
+
+    def test_status_writes_pr_ci_snapshot_artifacts(self) -> None:
+        fake_status = {
+            "owner": "acme",
+            "repo": "widget",
+            "pullNumber": 7,
+            "pullTitle": "Fix button state",
+            "pullUrl": "https://github.com/acme/widget/pull/7",
+            "state": "open",
+            "merged": False,
+            "mergeable": True,
+            "headRef": "feature/fix",
+            "baseRef": "main",
+            "headSha": "abc123",
+            "ciState": "success",
+            "latestRun": {"id": 101, "name": "CI", "status": "completed", "conclusion": "success", "htmlUrl": "https://github.com/acme/widget/actions/runs/101"},
+            "runs": [{"id": 101, "name": "CI", "status": "completed", "conclusion": "success", "htmlUrl": "https://github.com/acme/widget/actions/runs/101"}],
+            "checks": {"state": "success", "total": 1, "success": 1, "failure": 0, "pending": 0},
+        }
+        with tempfile.TemporaryDirectory(prefix="cifix-status-") as out:
+            with patch("cifix.status.load_pull_status", return_value=fake_status):
+                result = inspect_status({"url": "https://github.com/acme/widget/pull/7", "out": out})
+            status = json.loads(Path(result["paths"]["status"]).read_text())
+            self.assertEqual(status["ciState"], "success")
+            report = Path(result["paths"]["report"]).read_text()
+            self.assertIn("CI state: success", report)
+            dashboard = generate_dashboard({"artifacts": out})
+            html = Path(dashboard["dashboardPath"]).read_text()
+            self.assertIn("GitHub PR Status", html)
+            self.assertIn("#7 Fix button state", html)
 
     def test_hybrid_rag_returns_bm25_and_vector_scores(self) -> None:
         with tempfile.TemporaryDirectory(prefix="cifix-rag-") as out:

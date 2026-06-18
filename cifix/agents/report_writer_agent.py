@@ -53,6 +53,7 @@ def run_report_writer_agent(**kwargs: Any) -> None:
 
 def render_report(run_id: str, started_at: str, fingerprint: dict[str, Any], playbook_hits: list[dict[str, Any]], reproduction: dict[str, Any], model_diagnosis: dict[str, Any], tournament: dict[str, Any], selected: dict[str, Any] | None, command: str, setup_result: dict[str, Any] | None, memory_write: dict[str, Any], github_write: dict[str, Any], github_context: dict[str, Any] | None) -> str:
     playbook_lines = "\n".join(render_rag_hit(hit) for hit in playbook_hits) or "- No RAG memory matched."
+    evidence_table = render_rag_evidence_table(playbook_hits)
     tournament_lines = "\n".join(f"{i + 1}. {c['id']}\n   - passed: {c['verification']['passed']}\n   - risk: {c['riskScore']}\n   - ranking: {c['rankingScore']}\n   - hypothesis: {c['hypothesis']}" for i, c in enumerate(tournament["candidates"]))
     github_lines = render_github_context(github_context)
     return f"""# CIFix Report
@@ -70,6 +71,8 @@ def render_report(run_id: str, started_at: str, fingerprint: dict[str, Any], pla
 {github_lines}
 
 ## Hybrid RAG Retrieval
+
+{evidence_table}
 
 {playbook_lines}
 
@@ -127,6 +130,24 @@ def render_rag_hit(hit: dict[str, Any]) -> str:
     vector = hit.get("vectorScore", "n/a")
     terms = ", ".join(hit.get("matchedTerms", [])[:6]) or "none"
     return f"- {hit['id']} ({hit.get('source', 'memory')}) hybrid={score}, bm25={bm25}, vector={vector}; terms={terms}\n  - {hit['strategy']}"
+
+
+def render_rag_evidence_table(hits: list[dict[str, Any]]) -> str:
+    if not hits:
+        return "No RAG evidence was retrieved."
+    rows = "\n".join(
+        f"| {hit.get('id')} | {hit.get('source', 'memory')} | {hit.get('hybridScore', hit.get('score', 'n/a'))} | {hit.get('bm25Score', 'n/a')} | {hit.get('vectorScore', 'n/a')} | {shorten(hit.get('strategy', ''))} |"
+        for hit in hits[:5]
+    )
+    return f"""| Evidence | Source | Hybrid | BM25 | Vector | Strategy |
+|---|---|---:|---:|---:|---|
+{rows}
+"""
+
+
+def shorten(value: str, limit: int = 120) -> str:
+    text = " ".join(str(value).split())
+    return text if len(text) <= limit else f"{text[: limit - 3]}..."
 
 
 def render_risk_report(selected: dict[str, Any] | None, tournament: dict[str, Any]) -> str:

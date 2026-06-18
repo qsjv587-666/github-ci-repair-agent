@@ -13,9 +13,10 @@ def generate_dashboard(flags: dict[str, Any]) -> dict[str, str]:
     runs = discover_run_artifacts(artifacts_root)
     evals = discover_eval_artifacts(artifacts_root)
     inspections = discover_inspect_artifacts(artifacts_root)
+    statuses = discover_status_artifacts(artifacts_root)
     out_path.parent.mkdir(parents=True, exist_ok=True)
-    out_path.write_text(render_dashboard(artifacts_root, runs, evals, inspections))
-    return {"dashboardPath": str(out_path), "runs": str(len(runs)), "evals": str(len(evals)), "inspections": str(len(inspections))}
+    out_path.write_text(render_dashboard(artifacts_root, runs, evals, inspections, statuses))
+    return {"dashboardPath": str(out_path), "runs": str(len(runs)), "evals": str(len(evals)), "inspections": str(len(inspections)), "statuses": str(len(statuses))}
 
 
 def discover_run_artifacts(root: Path) -> list[dict[str, Any]]:
@@ -28,8 +29,12 @@ def discover_run_artifacts(root: Path) -> list[dict[str, Any]]:
         verification = read_json(run_dir / "verification.json") or {}
         model = read_json(run_dir / "model-diagnosis.json") or {}
         memory = read_json(run_dir / "memory-write.json") or {}
+        github_write = read_json(run_dir / "github-write.json") or {}
         github_context = read_json(run_dir / "github-context.json") or {}
+        rag_hits = read_json(run_dir / "repair-playbook-hits.json")
         selected = verification.get("selected") or {}
+        candidates = verification.get("candidates") or []
+        top_rag = first_rag_hit(rag_hits)
         runs.append(
             {
                 "id": run_dir.name,
@@ -42,6 +47,20 @@ def discover_run_artifacts(root: Path) -> list[dict[str, Any]]:
                 "model": model.get("model") if "model" in model else "disabled",
                 "memoryWritten": bool(memory.get("written")),
                 "githubRun": github_context.get("runId"),
+                "sourcePullNumber": github_context.get("pullNumber"),
+                "sourcePullUrl": github_context.get("pullHtmlUrl"),
+                "sourceRunUrl": github_context.get("runHtmlUrl"),
+                "repairStatus": github_write.get("status"),
+                "repairPullNumber": github_write.get("pullNumber"),
+                "repairPullUrl": github_write.get("pullUrl"),
+                "repairBranch": github_write.get("branch"),
+                "candidateCount": len(candidates),
+                "passedCandidates": len([item for item in candidates if item.get("verification", {}).get("passed")]),
+                "bestCandidate": candidates[0].get("id") if candidates else None,
+                "bestRisk": candidates[0].get("riskScore") if candidates else None,
+                "topRagId": top_rag.get("id") if top_rag else None,
+                "topRagSource": top_rag.get("source") if top_rag else None,
+                "topRagScore": top_rag.get("hybridScore") if top_rag else top_rag.get("score") if top_rag else None,
             }
         )
     return sorted(runs, key=lambda item: item["id"], reverse=True)
@@ -69,6 +88,17 @@ def discover_inspect_artifacts(root: Path) -> list[dict[str, Any]]:
     return sorted(inspections, key=lambda item: item["id"], reverse=True)
 
 
+def discover_status_artifacts(root: Path) -> list[dict[str, Any]]:
+    statuses = []
+    for status_path in root.rglob("status.json"):
+        status_dir = status_path.parent
+        if not status_dir.name.startswith("status_"):
+            continue
+        status = read_json(status_path) or {}
+        statuses.append({**status, "id": status_dir.name, "path": status_dir})
+    return sorted(statuses, key=lambda item: item["id"], reverse=True)
+
+
 def read_json(path: Path) -> dict[str, Any] | None:
     if not path.exists():
         return None
@@ -79,7 +109,7 @@ def read_json(path: Path) -> dict[str, Any] | None:
     return loaded if isinstance(loaded, dict) else None
 
 
-def render_dashboard(root: Path, runs: list[dict[str, Any]], evals: list[dict[str, Any]], inspections: list[dict[str, Any]]) -> str:
+def render_dashboard(root: Path, runs: list[dict[str, Any]], evals: list[dict[str, Any]], inspections: list[dict[str, Any]], statuses: list[dict[str, Any]]) -> str:
     success_runs = len([run for run in runs if run["status"] == "success"])
     latest_eval = evals[0] if evals else {}
     return f"""<!doctype html>
@@ -106,6 +136,8 @@ def render_dashboard(root: Path, runs: list[dict[str, Any]], evals: list[dict[st
     a:hover {{ text-decoration: underline; }}
     .pill {{ display: inline-block; padding: 2px 8px; border-radius: 999px; font-size: 12px; background: #edf7ed; color: #236b2e; }}
     .warn {{ background: #fff4e5; color: #8a5200; }}
+    .bad {{ background: #fdecec; color: #9b1c1c; }}
+    .mono {{ font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; font-size: 12px; }}
   </style>
 </head>
 <body>
@@ -119,11 +151,16 @@ def render_dashboard(root: Path, runs: list[dict[str, Any]], evals: list[dict[st
       <div class="metric"><strong>{success_runs}</strong><span>successful runs</span></div>
       <div class="metric"><strong>{len(evals)}</strong><span>eval reports</span></div>
       <div class="metric"><strong>{len(inspections)}</strong><span>GitHub inspections</span></div>
+      <div class="metric"><strong>{len(statuses)}</strong><span>GitHub status snapshots</span></div>
       <div class="metric"><strong>{escape(str(latest_eval.get("successRate", "n/a")))}</strong><span>latest eval success rate</span></div>
     </section>
     <section>
       <h2>Recent Runs</h2>
       {render_runs_table(root, runs)}
+    </section>
+    <section>
+      <h2>GitHub PR Status</h2>
+      {render_status_table(root, statuses)}
     </section>
     <section>
       <h2>Eval Reports</h2>
@@ -146,15 +183,32 @@ def render_runs_table(root: Path, runs: list[dict[str, Any]]) -> str:
         f"""<tr>
   <td>{link(root, run["path"] / "report.md", run["id"])}</td>
   <td><span class="pill {'warn' if run['status'] != 'success' else ''}">{escape(run["status"])}</span></td>
-  <td>{escape(run["platform"])} / {escape(run["project"])}</td>
+  <td>{escape(run["platform"])} / {escape(run["project"])}<br>{external_link(run.get("sourcePullUrl"), f"source PR #{run.get('sourcePullNumber')}")}</td>
   <td>{escape(run["failureType"])}<br><span class="muted">{escape(run["errorCode"])}</span></td>
-  <td>{escape(str(run["model"]))}</td>
-  <td>{escape("yes" if run["memoryWritten"] else "no")}</td>
-  <td>{link(root, run["path"] / "patch.diff", "patch")} · {link(root, run["path"] / "trace.json", "trace")} · {link(root, run["path"] / "pr-comment.md", "comment")}</td>
+  <td>{escape(str(run["candidateCount"]))} candidates<br>{escape(str(run["passedCandidates"]))} passed<br><span class="muted">{escape(str(run.get("bestCandidate") or "n/a"))} risk={escape(str(run.get("bestRisk") or "n/a"))}</span></td>
+  <td>{escape(str(run.get("topRagId") or "none"))}<br><span class="muted">{escape(str(run.get("topRagSource") or ""))} score={escape(str(run.get("topRagScore") or "n/a"))}</span></td>
+  <td>{render_repair_cell(run)}</td>
+  <td>{link(root, run["path"] / "patch.diff", "patch")} · {link(root, run["path"] / "trace.json", "trace")} · {link(root, run["path"] / "repair-playbook-hits.json", "rag")} · {link(root, run["path"] / "github-write.json", "write")}</td>
 </tr>"""
         for run in runs[:50]
     )
-    return f"<table><thead><tr><th>Run</th><th>Status</th><th>Project</th><th>Failure</th><th>Model</th><th>Memory</th><th>Artifacts</th></tr></thead><tbody>{rows}</tbody></table>"
+    return f"<table><thead><tr><th>Run</th><th>Status</th><th>Project</th><th>Failure</th><th>Patch Tournament</th><th>Top RAG Evidence</th><th>GitHub Write</th><th>Artifacts</th></tr></thead><tbody>{rows}</tbody></table>"
+
+
+def render_status_table(root: Path, statuses: list[dict[str, Any]]) -> str:
+    if not statuses:
+        return "<p class=\"muted\">No GitHub status snapshots found.</p>"
+    rows = "\n".join(
+        f"""<tr>
+  <td>{link(root, item["path"] / "report.md", item["id"])}</td>
+  <td>{external_link(item.get("pullUrl"), f"#{item.get('pullNumber')} {item.get('pullTitle') or ''}")}</td>
+  <td><span class="pill {status_class(item.get('ciState'))}">{escape(str(item.get("ciState") or "unknown"))}</span></td>
+  <td>{escape(str(item.get("headRef")))} -> {escape(str(item.get("baseRef")))}</td>
+  <td>{render_latest_run(item.get("latestRun"))}</td>
+</tr>"""
+        for item in statuses[:30]
+    )
+    return f"<table><thead><tr><th>Snapshot</th><th>Pull Request</th><th>CI</th><th>Branches</th><th>Latest Run</th></tr></thead><tbody>{rows}</tbody></table>"
 
 
 def render_evals_table(root: Path, evals: list[dict[str, Any]]) -> str:
@@ -196,6 +250,39 @@ def link(root: Path, target: Path, label: str) -> str:
     except ValueError:
         href = target.as_posix()
     return f"<a href=\"../{escape(href)}\">{escape(str(label))}</a>"
+
+
+def external_link(url: str | None, label: str) -> str:
+    if not url:
+        return '<span class="muted">n/a</span>'
+    return f"<a href=\"{escape(url)}\">{escape(label)}</a>"
+
+
+def render_repair_cell(run: dict[str, Any]) -> str:
+    status = run.get("repairStatus") or "skipped"
+    branch = f"<br><span class=\"muted mono\">{escape(str(run.get('repairBranch') or ''))}</span>" if run.get("repairBranch") else ""
+    repair_label = f"repair PR #{run.get('repairPullNumber')}"
+    return f"<span class=\"pill {status_class(status)}\">{escape(str(status))}</span><br>{external_link(run.get('repairPullUrl'), repair_label)}{branch}"
+
+
+def render_latest_run(run: dict[str, Any] | None) -> str:
+    if not run:
+        return '<span class="muted">n/a</span>'
+    return f"{external_link(run.get('htmlUrl'), str(run.get('id') or 'run'))}<br><span class=\"muted\">{escape(str(run.get('status')))} / {escape(str(run.get('conclusion')))}</span>"
+
+
+def status_class(status: str | None) -> str:
+    if status in {"success", "pr_created", "pushed"}:
+        return ""
+    if status in {"pending", "pushed_no_pr", "skipped"}:
+        return "warn"
+    return "bad"
+
+
+def first_rag_hit(value: Any) -> dict[str, Any] | None:
+    if isinstance(value, list) and value and isinstance(value[0], dict):
+        return value[0]
+    return None
 
 
 def escape(value: str) -> str:

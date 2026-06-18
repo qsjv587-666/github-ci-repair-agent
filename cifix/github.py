@@ -89,6 +89,41 @@ def load_github_context(*, pr_url: str | None, owner_repo: str | None, pull_numb
     }
 
 
+def load_pull_status(*, pr_url: str | None, owner_repo: str | None, pull_number: str | None, token: str | None) -> dict[str, Any]:
+    parsed = parse_github_url(pr_url) if pr_url else parse_owner_repo(owner_repo)
+    if not parsed:
+        raise ValueError("status needs --url or --repo owner/repo with --pr")
+    owner = parsed["owner"]
+    repo = parsed["repo"]
+    resolved_pull_number = parsed.get("pullNumber") or (int(pull_number) if pull_number else None)
+    if not resolved_pull_number:
+        raise ValueError("status needs a pull request number")
+
+    pull = github_json(f"/repos/{owner}/{repo}/pulls/{resolved_pull_number}", token)
+    head_sha = pull.get("head", {}).get("sha")
+    runs_payload = github_json(f"/repos/{owner}/{repo}/actions/runs?{urlencode({'head_sha': head_sha, 'per_page': 10})}", token) if head_sha else {"workflow_runs": []}
+    runs = runs_payload.get("workflow_runs", []) if isinstance(runs_payload, dict) else []
+    latest_run = runs[0] if runs else None
+    checks = summarize_checks(runs)
+    return {
+        "owner": owner,
+        "repo": repo,
+        "pullNumber": resolved_pull_number,
+        "pullTitle": pull.get("title"),
+        "pullUrl": pull.get("html_url"),
+        "state": pull.get("state"),
+        "merged": pull.get("merged"),
+        "mergeable": pull.get("mergeable"),
+        "headRef": pull.get("head", {}).get("ref"),
+        "baseRef": pull.get("base", {}).get("ref"),
+        "headSha": head_sha,
+        "latestRun": public_run(latest_run),
+        "runs": [public_run(run) for run in runs[:5]],
+        "checks": checks,
+        "ciState": checks["state"],
+    }
+
+
 def parse_owner_repo(owner_repo: str | None) -> dict[str, str] | None:
     if not owner_repo or "/" not in owner_repo:
         return None
@@ -136,6 +171,40 @@ def resolve_job(jobs: list[dict[str, Any]], job_id: int | None) -> dict[str, Any
     if job_id:
         return next((job for job in jobs if int(job["id"]) == int(job_id)), {"id": job_id})
     return next((job for job in jobs if job.get("conclusion") == "failure"), None) or next((job for job in jobs if job.get("status") == "completed"), None)
+
+
+def summarize_checks(runs: list[dict[str, Any]]) -> dict[str, Any]:
+    if not runs:
+        return {"state": "missing", "total": 0, "success": 0, "failure": 0, "pending": 0}
+    latest = runs[0]
+    if latest.get("status") != "completed":
+        state = "pending"
+    elif latest.get("conclusion") == "success":
+        state = "success"
+    else:
+        state = "failure"
+    return {
+        "state": state,
+        "total": len(runs),
+        "success": len([run for run in runs if run.get("conclusion") == "success"]),
+        "failure": len([run for run in runs if run.get("conclusion") and run.get("conclusion") != "success"]),
+        "pending": len([run for run in runs if run.get("status") != "completed"]),
+    }
+
+
+def public_run(run: dict[str, Any] | None) -> dict[str, Any] | None:
+    if not run:
+        return None
+    return {
+        "id": run.get("id"),
+        "name": run.get("name"),
+        "status": run.get("status"),
+        "conclusion": run.get("conclusion"),
+        "htmlUrl": run.get("html_url"),
+        "headSha": run.get("head_sha"),
+        "createdAt": run.get("created_at"),
+        "updatedAt": run.get("updated_at"),
+    }
 
 
 def public_github_context(context: dict[str, Any] | None) -> dict[str, Any] | None:
