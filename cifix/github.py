@@ -33,6 +33,28 @@ def github_text(path: str, token: str | None) -> str:
         return response.read().decode(errors="replace")
 
 
+def list_open_pull_statuses(*, owner_repo: str, token: str | None, limit: int = 20) -> list[dict[str, Any]]:
+    parsed = parse_owner_repo(owner_repo)
+    if not parsed:
+        raise ValueError("watch needs --repo owner/repo")
+    owner = parsed["owner"]
+    repo = parsed["repo"]
+    pulls = github_json(f"/repos/{owner}/{repo}/pulls?{urlencode({'state': 'open', 'per_page': limit})}", token)
+    statuses = []
+    for pull in pulls if isinstance(pulls, list) else []:
+        statuses.append(load_pull_status(pr_url=None, owner_repo=owner_repo, pull_number=str(pull["number"]), token=token))
+    return statuses
+
+
+def create_pr_comment(*, owner: str, repo: str, pull_number: int, body: str, token: str) -> dict[str, Any]:
+    return github_request_json(
+        "POST",
+        f"/repos/{owner}/{repo}/issues/{pull_number}/comments",
+        token,
+        {"body": body},
+    )
+
+
 def load_github_context(*, pr_url: str | None, owner_repo: str | None, pull_number: str | None, run_id: str | None, job_id: str | None, token: str | None) -> dict[str, Any] | None:
     if not pr_url and not owner_repo and not run_id and not job_id:
         return None

@@ -6,7 +6,7 @@
 
 ## 1. 项目一句话
 
-这是一个面向 GitHub Actions CI 失败场景的多 Agent 自动修复系统。它接收一个失败的 GitHub PR / workflow run / job URL，自动读取 PR 和 CI 上下文，在本地隔离 workspace 复现失败，生成多个候选 patch，逐个运行测试验证，选择风险最低的可行修复，并在有权限的仓库中自动推送修复分支、创建修复 PR。
+这是一个面向 GitHub Actions CI 失败场景的多 Agent 自动修复系统。它可以接收一个失败的 GitHub PR / workflow run / job URL，也可以由本地 watcher 周期性扫描目标仓库 open PR，在发现 CI failed 后自动触发修复流程。系统会读取 PR 和 CI 上下文，在本地隔离 workspace 复现失败，生成多个候选 patch，逐个运行测试验证，选择风险最低的可行修复，并在有权限的仓库中自动推送修复分支、创建修复 PR。
 
 更适合简历或面试第一句话的表述：
 
@@ -18,6 +18,7 @@
 - 把历史修复经验做成可检索的 repair memory。
 - 用多候选 patch + 真实测试验证替代单次盲改。
 - 把修复结果写回 GitHub，形成可审查、可回滚的 PR 闭环；低风险场景下可以显式开启自动 merge 修复 PR。
+- 在本地运行 watcher，轮询 GitHub PR 的 CI 状态，发现新失败后自动进入修复流程。
 - 用 eval / dashboard / trace 让系统效果可以复盘和展示。
 
 ## 2. 当前已经跑通的真实闭环
@@ -65,7 +66,7 @@
 
 核心入口：
 
-- `cifix/cli.py`：命令行入口，支持 `run`、`inspect`、`rag`、`eval`、`dashboard`、`doctor`。
+- `cifix/cli.py`：命令行入口，支持 `run`、`watch`、`inspect`、`status`、`rag`、`eval`、`dashboard`、`doctor`。
 - `cifix/run.py`：主编排入口，串起所有 agent。
 
 核心 Agent：
@@ -84,6 +85,7 @@
 支撑模块：
 
 - `cifix/github.py`：GitHub PR / Actions API 读取和 PR 创建。
+- `cifix/watch.py`：本地轮询目标仓库 open PR，检测 CI failure，并对新失败自动触发修复。
 - `cifix/rag.py`：BM25、向量检索、ChromaDB / SQLite 向量后端、embedding provider。
 - `cifix/model.py`：Poe / Claude Opus 模型调用和候选 patch JSON 解析。
 - `cifix/tools/workspace.py`：clone / copy repo、checkout head commit、推断命令、repo map。
@@ -160,6 +162,20 @@ python3 -m cifix.cli run \
 - `GITHUB_TOKEN`：用于 GitHub API 读取 PR、Actions、创建 PR。
 - SSH key 或可 push 的 git 凭证：用于推送修复分支。
 - `--create-pr`：显式开启写回。默认只读，不会推分支或创建 PR。
+
+如果希望“PR 一失败就自动处理”，当前采用本地 watcher 轮询方案：
+
+```bash
+python3 -m cifix.cli watch \
+  --repo owner/repo \
+  --interval-seconds 300 \
+  --create-pr \
+  --comment-source-pr \
+  --token-env GITHUB_TOKEN \
+  --ssh-key ~/.ssh/github_ci_repair_agent
+```
+
+它不是让 GitHub 直接访问你的电脑，而是本地 Agent 每隔一段时间主动查询目标仓库 open PR 的最新 CI 状态。发现 `failure` 后，系统用 `PR number + head SHA + workflow run id` 作为去重 key，只对新的失败触发一次修复流程，并把处理记录写入 `artifacts/watch-state/`。
 
 ### 5.2 输出
 
@@ -500,6 +516,8 @@ ci-repair/pr-3-xxx -> fail/counter-increment
 
 如果没有 `GITHUB_TOKEN`，系统仍可以在 SSH 可用时推送 repair branch，并在 `github-write.json` 里给出 compare URL；如果 token 可用，则直接创建 PR。
 
+如果传入 `--comment-source-pr`，watcher 在修复流程结束后还会把 `pr-comment.md` 的诊断摘要评论回源失败 PR，并附上 repair PR 链接。这个能力需要 token 具备 PR / issue comment 写权限。
+
 ### 13.1 自动 merge 修复 PR
 
 自动 merge 默认关闭。只有显式传入：
@@ -663,7 +681,7 @@ python3 -m cifix.cli eval \
 
 - 目前主要验证 Node / JavaScript demo 项目。
 - patch 生成仍有规则 fallback，真实复杂项目需要更多语言和框架适配。
-- 当前是 CLI 工作台，不是常驻 webhook 服务。
+- 当前是 CLI 工作台，可以通过本地 watcher 轮询 GitHub 触发修复，但还不是 GitHub webhook / GitHub App 服务。
 - 默认不会自动 merge，merge 仍由人完成。
 - DashScope embedding 如果账号未开通对应模型权限，需要用 `hash` provider 或换可用 embedding。
 - GitHub 写回需要用户配置 token 和 SSH key。
@@ -725,6 +743,28 @@ python3 -m cifix.cli eval --cases fixtures --out artifacts/eval
 python3 -m cifix.cli inspect \
   --url https://github.com/owner/repo/pull/123 \
   --token-env GITHUB_TOKEN
+```
+
+本地 watcher 单次扫描，先 dry-run：
+
+```bash
+python3 -m cifix.cli watch \
+  --repo owner/repo \
+  --once \
+  --dry-run \
+  --token-env GITHUB_TOKEN
+```
+
+本地 watcher 持续轮询，发现失败后自动创建 repair PR 并评论源 PR：
+
+```bash
+python3 -m cifix.cli watch \
+  --repo owner/repo \
+  --interval-seconds 300 \
+  --create-pr \
+  --comment-source-pr \
+  --token-env GITHUB_TOKEN \
+  --ssh-key ~/.ssh/github_ci_repair_agent
 ```
 
 真实 GitHub 修复并创建 PR：

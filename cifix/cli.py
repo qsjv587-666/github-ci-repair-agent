@@ -13,6 +13,7 @@ from .model import model_config_from_env
 from .rag import embedding_config_from_flags, query_repair_rag, vector_db_from_flags
 from .run import run_cifix
 from .status import inspect_status
+from .watch import run_watch
 
 
 def main(argv: list[str] | None = None) -> int:
@@ -49,6 +50,17 @@ def main(argv: list[str] | None = None) -> int:
         latest = summary.get("latestRun") or {}
         print(f"latest_run: {latest.get('htmlUrl') or 'n/a'}")
         print(f"report: {result['paths']['report']}")
+        return 0
+    if command == "watch":
+        result = run_watch(flags)
+        summary = result["summary"]
+        print(f"watch_id: {result['watchId']}")
+        print(f"repo: {summary.get('repo')}")
+        print(f"open_pulls: {summary.get('openPulls')}")
+        print(f"failed_pulls: {summary.get('failedPulls')}")
+        print(f"repair_started: {summary.get('repairStarted')}")
+        print(f"report: {result['paths']['report']}")
+        print(f"state: {result['paths']['state']}")
         return 0
     if command == "dashboard":
         result = generate_dashboard(flags)
@@ -124,6 +136,8 @@ Usage:
   cifix doctor
   cifix inspect --url https://github.com/owner/repo/pull/123 [--token-env GITHUB_TOKEN]
   cifix status --url https://github.com/owner/repo/pull/123 [--token-env GITHUB_TOKEN]
+  cifix watch --repo owner/repo --once [--dry-run] [--token-env GITHUB_TOKEN]
+  cifix watch --repo owner/repo --interval-seconds 300 [--max-cycles 3] [--token-env GITHUB_TOKEN]
   cifix rag --query "ERR_ASSERTION disabled false true" [--memory-path artifacts/memory/verified-repairs.json] [--vector-db sqlite|chroma] [--embedding-provider hash|dashscope|zhipu]
   cifix dashboard [--artifacts artifacts] [--out artifacts/dashboard/index.html]
   cifix eval --cases fixtures [--out artifacts/eval] [--use-model] [--compare-baselines]
@@ -132,6 +146,7 @@ Usage:
   cifix run --url https://github.com/owner/repo/actions/runs/456/job/789 --token-env GITHUB_TOKEN
   cifix run --repo owner/repo --pr 123 --run-id <id> --job <id> --token-env GITHUB_TOKEN
   cifix run --url https://github.com/owner/repo/pull/123 --create-pr --token-env GITHUB_TOKEN [--ssh-key ~/.ssh/github_ci_repair_agent] [--draft-pr] [--auto-merge-repair-pr] [--require-repair-ci]
+  cifix watch --repo owner/repo --interval-seconds 300 --create-pr --comment-source-pr --token-env GITHUB_TOKEN [--ssh-key ~/.ssh/github_ci_repair_agent]
 
 Model mode:
   POE_API_KEY=... POE_MODEL=Claude-Opus-4.6 python -m cifix.cli run --repo <path> --command "npm test" --log <ci-log> --use-model

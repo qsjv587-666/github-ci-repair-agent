@@ -17,6 +17,8 @@ It supports:
 - Patch tournament across candidate repairs.
 - Structured artifacts for report, trace, patch, risk report, PR comment draft, memory write, GitHub context, and GitHub write-back status.
 - Optional `--create-pr` write-back: commit the verified patch, push a repair branch, and create a PR when a write-capable `GITHUB_TOKEN` is configured.
+- Optional `watch` mode: poll a target GitHub repository for open PRs whose latest CI failed, trigger the repair workflow once per failed head SHA / workflow run, and optionally comment back on the source PR.
+- Optional gated auto-merge of low-risk repair PRs with `--auto-merge-repair-pr`.
 - Eval runner with baseline comparison.
 - Static dashboard over run/eval/inspect artifacts.
 
@@ -24,7 +26,7 @@ It does not support in MVP:
 
 - GitHub write-back without explicit `--create-pr`.
 - GitHub PR creation without a token that has Pull requests write permission.
-- Merging PRs.
+- GitHub webhook / GitHub App event ingestion.
 - Running arbitrary shell commands.
 - Claiming support for all languages/build systems.
 
@@ -127,6 +129,28 @@ python3 -m cifix.cli run \
   --use-model
 ```
 
+Local watcher dry-run:
+
+```bash
+python3 -m cifix.cli watch \
+  --repo owner/repo \
+  --once \
+  --dry-run \
+  --token-env GITHUB_TOKEN
+```
+
+Local watcher repair mode:
+
+```bash
+python3 -m cifix.cli watch \
+  --repo owner/repo \
+  --interval-seconds 300 \
+  --create-pr \
+  --comment-source-pr \
+  --token-env GITHUB_TOKEN \
+  --ssh-key ~/.ssh/github_ci_repair_agent
+```
+
 ## Current Verification
 
 Latest local verification:
@@ -134,7 +158,7 @@ Latest local verification:
 ```text
 python3 -m compileall -q cifix tests
 python3 -m unittest discover -s tests
-9 tests OK
+21 tests OK
 
 python3 -m cifix.cli eval --cases fixtures --out artifacts/eval
 cases: 4

@@ -117,6 +117,7 @@ Current scope:
 - Command safety policy with an allowlist for test/lint/typecheck commands.
 - Structured artifacts: report, trace, patch candidates, selected patch, risk report, PR comment draft, GitHub write-back result.
 - Optional GitHub write-back via `--create-pr`: commit the verified patch, push a repair branch, and create a PR when `GITHUB_TOKEN` has write permissions.
+- Optional local watcher via `watch`: poll open GitHub PRs, detect failed CI, trigger the repair workflow once per failed head SHA / workflow run, and optionally comment back on the source PR.
 - Eval runner over multiple CI failure fixtures.
 - Baseline comparison for `full`, `no_memory`, and `single_candidate` eval variants.
 - Static dashboard for run/eval/inspect artifact browsing.
@@ -193,6 +194,30 @@ python3 -m cifix.cli run \
 Auto-merge is gated: the repair PR must target the source PR head branch, the selected patch must pass local verification, repair PR CI must pass when the repository triggers checks for that repair PR, the patch must not touch tests or carry overfit/noop risk tags, and the diff must stay under the configured line threshold. If the repository does not run checks for PRs targeting feature branches, CIFix waits briefly for checks to appear, records that fallback, and relies on local verification plus the source PR CI rerun after merge. Use `--require-repair-ci` to force strict repair PR checks.
 
 For automatic PR creation, use a fine-grained GitHub token limited to the target repo with Contents read/write and Pull requests read/write permissions. For read-only inspect/run, Contents read, Actions read, and Pull requests read are enough.
+
+To let a local machine react to CI failures without exposing a webhook endpoint, run the polling watcher. Start with `--dry-run` to confirm which PRs would be repaired:
+
+```bash
+python3 -m cifix.cli watch \
+  --repo owner/repo \
+  --once \
+  --dry-run \
+  --token-env GITHUB_TOKEN
+```
+
+Then enable repairs. The watcher stores processed failures in `artifacts/watch-state/<owner>__<repo>.json`, keyed by PR number, head SHA, and workflow run id, so the same failed run is not repaired repeatedly.
+
+```bash
+python3 -m cifix.cli watch \
+  --repo owner/repo \
+  --interval-seconds 300 \
+  --create-pr \
+  --comment-source-pr \
+  --token-env GITHUB_TOKEN \
+  --ssh-key ~/.ssh/github_ci_repair_agent
+```
+
+For local demos, add `--max-cycles 1` or `--once`. For source PR comments, the token also needs permission to write PR/issue comments.
 
 Model mode uses environment variables. Do not put API keys in source files. Having `POE_API_KEY` in `.env` only makes the model available; the model is used only when `--use-model` or `CIFIX_USE_MODEL=1` is set.
 

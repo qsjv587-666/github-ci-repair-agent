@@ -19,6 +19,7 @@ from cifix.run import run_cifix
 from cifix.status import inspect_status
 from cifix.tools.command import run_command
 from cifix.tools.workspace import infer_setup_command
+from cifix.watch import build_dedupe_key, run_watch_once
 
 
 class CifixSmokeTest(unittest.TestCase):
@@ -416,6 +417,127 @@ class CifixSmokeTest(unittest.TestCase):
         self.assertEqual(captured[0]["vector-db"], "chroma")
         self.assertEqual(captured[0]["embedding-provider"], "dashscope")
         self.assertEqual(captured[0]["embedding-model"], "text-embedding-v4")
+
+    def test_watch_once_triggers_failed_pr_and_records_state(self) -> None:
+        fake_statuses = [
+            {
+                "owner": "acme",
+                "repo": "widget",
+                "pullNumber": 7,
+                "pullTitle": "Fix button",
+                "pullUrl": "https://github.com/acme/widget/pull/7",
+                "state": "open",
+                "headSha": "abc123",
+                "ciState": "failure",
+                "latestRun": {"id": 101, "htmlUrl": "https://github.com/acme/widget/actions/runs/101"},
+            },
+            {
+                "owner": "acme",
+                "repo": "widget",
+                "pullNumber": 8,
+                "pullTitle": "Green PR",
+                "pullUrl": "https://github.com/acme/widget/pull/8",
+                "state": "open",
+                "headSha": "def456",
+                "ciState": "success",
+                "latestRun": {"id": 102},
+            },
+        ]
+        captured_flags = []
+
+        def fake_run_cifix(flags: dict):
+            captured_flags.append(flags)
+            return {
+                "runId": "run_fake",
+                "status": "success",
+                "paths": {"prComment": "/tmp/missing-comment.md"},
+                "githubWrite": {"enabled": False},
+            }
+
+        with tempfile.TemporaryDirectory(prefix="cifix-watch-") as out:
+            with (
+                patch.dict(os.environ, {"GITHUB_TOKEN": "token"}),
+                patch("cifix.watch.list_open_pull_statuses", return_value=fake_statuses),
+                patch("cifix.watch.run_cifix", side_effect=fake_run_cifix),
+            ):
+                result = run_watch_once({"repo": "acme/widget", "out": out, "once": True, "create-pr": True})
+                second = run_watch_once({"repo": "acme/widget", "out": out, "once": True, "create-pr": True})
+
+            self.assertEqual(result["summary"]["failedPulls"], 1)
+            self.assertEqual(result["summary"]["repairStarted"], 1)
+            self.assertEqual(second["summary"]["repairStarted"], 0)
+            self.assertEqual(second["summary"]["skipped"], 1)
+            self.assertEqual(len(captured_flags), 1)
+            self.assertEqual(captured_flags[0]["url"], "https://github.com/acme/widget/pull/7")
+            self.assertTrue(captured_flags[0]["create-pr"])
+            state = json.loads(Path(result["paths"]["state"]).read_text())
+            key = build_dedupe_key("acme/widget", fake_statuses[0])
+            self.assertIn(key, state["processed"])
+
+    def test_watch_dry_run_does_not_trigger_or_record(self) -> None:
+        fake_statuses = [
+            {
+                "owner": "acme",
+                "repo": "widget",
+                "pullNumber": 7,
+                "pullTitle": "Fix button",
+                "pullUrl": "https://github.com/acme/widget/pull/7",
+                "state": "open",
+                "headSha": "abc123",
+                "ciState": "failure",
+                "latestRun": {"id": 101},
+            }
+        ]
+        with tempfile.TemporaryDirectory(prefix="cifix-watch-dry-") as out:
+            with (
+                patch.dict(os.environ, {"GITHUB_TOKEN": "token"}),
+                patch("cifix.watch.list_open_pull_statuses", return_value=fake_statuses),
+                patch("cifix.watch.run_cifix") as run_mock,
+            ):
+                result = run_watch_once({"repo": "acme/widget", "out": out, "once": True, "dry-run": True})
+
+            self.assertEqual(result["summary"]["dryRun"], 1)
+            run_mock.assert_not_called()
+            state = json.loads(Path(result["paths"]["state"]).read_text())
+            self.assertEqual(state["processed"], {})
+
+    def test_watch_can_comment_source_pr_after_repair(self) -> None:
+        fake_status = {
+            "owner": "acme",
+            "repo": "widget",
+            "pullNumber": 7,
+            "pullTitle": "Fix button",
+            "pullUrl": "https://github.com/acme/widget/pull/7",
+            "state": "open",
+            "headSha": "abc123",
+            "ciState": "failure",
+            "latestRun": {"id": 101},
+        }
+
+        with tempfile.TemporaryDirectory(prefix="cifix-watch-comment-") as out:
+            comment_path = Path(out) / "pr-comment.md"
+            comment_path.write_text("CI repair summary")
+
+            def fake_run_cifix(flags: dict):
+                return {
+                    "runId": "run_fake",
+                    "status": "success",
+                    "paths": {"prComment": str(comment_path)},
+                    "githubWrite": {"pullUrl": "https://github.com/acme/widget/pull/9"},
+                }
+
+            with (
+                patch.dict(os.environ, {"GITHUB_TOKEN": "token"}),
+                patch("cifix.watch.list_open_pull_statuses", return_value=[fake_status]),
+                patch("cifix.watch.run_cifix", side_effect=fake_run_cifix),
+                patch("cifix.watch.create_pr_comment", return_value={"id": 55, "html_url": "https://github.com/acme/widget/pull/7#issuecomment-55"}) as comment_mock,
+            ):
+                result = run_watch_once({"repo": "acme/widget", "out": out, "once": True, "comment-source-pr": True})
+
+            self.assertEqual(result["summary"]["repairStarted"], 1)
+            comment_mock.assert_called_once()
+            event = result["summary"]["events"][0]
+            self.assertEqual(event["repair"]["sourceComment"]["status"], "commented")
 
 
 if __name__ == "__main__":
