@@ -79,14 +79,14 @@ Use Qwen / DashScope embeddings with ChromaDB:
 
 ```bash
 export DASHSCOPE_API_KEY="your_dashscope_key"
+export CIFIX_VECTOR_DB=chroma
+export CIFIX_EMBEDDING_PROVIDER=dashscope
+export CIFIX_EMBEDDING_MODEL=text-embedding-v4
+export CIFIX_EMBEDDING_DIMENSIONS=1024
 
 python3 -m cifix.cli rag \
   --query "ERR_ASSERTION disabled false true login button" \
-  --memory-path artifacts/memory/verified-repairs.json \
-  --vector-db chroma \
-  --embedding-provider dashscope \
-  --embedding-model text-embedding-v4 \
-  --embedding-dimensions 1024
+  --memory-path artifacts/memory/verified-repairs.json
 ```
 
 Use Zhipu `embedding-3` with ChromaDB:
@@ -110,7 +110,7 @@ Current scope:
 - Optional Poe model mode for Claude Opus via OpenAI-compatible `/v1/chat/completions`.
 - Failure Fingerprint generation.
 - Hybrid RAG memory retrieval: BM25 keyword retrieval + vector database retrieval + hybrid reranking.
-- ChromaDB vector database backend via `--vector-db chroma`; SQLite brute-force vector scan remains as the zero-dependency fallback.
+- ChromaDB vector database backend via `--vector-db chroma` or `CIFIX_VECTOR_DB=chroma`; SQLite brute-force vector scan remains as the zero-dependency fallback.
 - Embedding providers: local hashing fallback, DashScope/Qwen `text-embedding-v4`, and Zhipu `embedding-3`.
 - Verified repair memory written only after tests pass, then indexed into the RAG store.
 - Patch Tournament with at least two candidates.

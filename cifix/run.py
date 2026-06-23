@@ -18,7 +18,7 @@ from .agents.test_agent import run_test_agent
 from .agents.github_writer_agent import run_github_writer_agent
 from .github import load_github_context
 from .core.trace import step
-from .rag import embedding_config_from_flags
+from .rag import embedding_config_from_flags, vector_db_from_flags
 from .tools.workspace import infer_command, infer_setup_command, map_repo, prepare_workspace, read_log, repo_looks_like_github_slug
 
 
@@ -29,7 +29,7 @@ def run_cifix(flags: dict[str, Any]) -> dict[str, Any]:
     run_dir = out_root / run_id
     workspace_dir = run_dir / "workspace"
     memory_path = Path(flags.get("memory-path") or "artifacts/memory/verified-repairs.json").resolve()
-    vector_db = str(flags.get("vector-db") or "sqlite")
+    vector_db = vector_db_from_flags(flags)
     embedding_config = embedding_config_from_flags(flags)
     trace: list[dict[str, Any]] = []
     run_dir.mkdir(parents=True, exist_ok=True)

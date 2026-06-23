@@ -735,7 +735,9 @@ python3 -m cifix.cli run \
   --command "npm test" \
   --out artifacts \
   --vector-db chroma \
-  --embedding-provider hash \
+  --embedding-provider dashscope \
+  --embedding-model text-embedding-v4 \
+  --embedding-dimensions 1024 \
   --use-model \
   --create-pr \
   --token-env GITHUB_TOKEN \
@@ -750,7 +752,9 @@ python3 -m cifix.cli run \
   --command "npm test" \
   --out artifacts \
   --vector-db chroma \
-  --embedding-provider hash \
+  --embedding-provider dashscope \
+  --embedding-model text-embedding-v4 \
+  --embedding-dimensions 1024 \
   --use-model \
   --create-pr \
   --auto-merge-repair-pr \

@@ -501,13 +501,17 @@ def query_repair_rag(flags: dict[str, Any]) -> dict[str, Any]:
     if not query:
         raise ValueError("rag needs --query <text>")
     memory_path = Path(flags.get("memory-path") or "artifacts/memory/verified-repairs.json").resolve()
-    vector_db = str(flags.get("vector-db") or "sqlite")
+    vector_db = vector_db_from_flags(flags)
     embedding_config = embedding_config_from_flags(flags)
     playbooks = json.loads((PACKAGE_ROOT / "data" / "playbooks.json").read_text())
     repairs = load_repair_memory(memory_path)
     rag = HybridRepairRAG(rag_index_path_for(memory_path), vector_db=vector_db, embedding_config=embedding_config)
     rag.rebuild(playbooks=playbooks, repairs=repairs)
     return rag.retrieve(query, top_k=int(flags.get("top-k") or 5))
+
+
+def vector_db_from_flags(flags: dict[str, Any]) -> str:
+    return str(flags.get("vector-db") or os.getenv("CIFIX_VECTOR_DB") or "sqlite")
 
 
 def load_repair_memory(memory_path: Path) -> list[dict[str, Any]]:

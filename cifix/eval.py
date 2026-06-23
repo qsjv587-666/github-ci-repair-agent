@@ -31,6 +31,11 @@ def run_eval(flags: dict[str, Any]) -> dict[str, Any]:
                     "out": str(case_out),
                     "use-model": flags.get("use-model"),
                     "memory-path": flags.get("memory-path") or str(eval_dir / "verified-repairs.json"),
+                    "vector-db": flags.get("vector-db"),
+                    "embedding-provider": flags.get("embedding-provider"),
+                    "embedding-model": flags.get("embedding-model"),
+                    "embedding-dimensions": flags.get("embedding-dimensions"),
+                    "embedding-base-url": flags.get("embedding-base-url"),
                     **variant["flags"],
                 }
             )

@@ -14,6 +14,7 @@ from cifix.agents.github_writer_agent import auto_merge_gate_error, build_repair
 from cifix.github import load_github_context, parse_github_url
 from cifix.inspect import inspect_github
 from cifix.rag import DashScopeEmbeddingProvider, HybridRepairRAG, ZhipuEmbeddingProvider, build_repair_query, create_embedding_provider
+from cifix.rag import vector_db_from_flags
 from cifix.run import run_cifix
 from cifix.status import inspect_status
 from cifix.tools.command import run_command
@@ -378,6 +379,43 @@ class CifixSmokeTest(unittest.TestCase):
         self.assertIsInstance(zhipu, ZhipuEmbeddingProvider)
         self.assertEqual(dashscope.endpoint(), "https://dashscope.aliyuncs.com/compatible-mode/v1/embeddings")
         self.assertEqual(zhipu.endpoint(), "https://open.bigmodel.cn/api/paas/v4/embeddings")
+
+    def test_vector_db_defaults_to_env(self) -> None:
+        with patch.dict(os.environ, {"CIFIX_VECTOR_DB": "chroma"}):
+            self.assertEqual(vector_db_from_flags({}), "chroma")
+            self.assertEqual(vector_db_from_flags({"vector-db": "sqlite"}), "sqlite")
+
+    def test_eval_passes_rag_flags_to_runs(self) -> None:
+        captured = []
+
+        def fake_run_cifix(flags: dict):
+            captured.append(flags)
+            out = Path(flags["out"])
+            out.mkdir(parents=True, exist_ok=True)
+            report = out / "report.md"
+            patch_path = out / "patch.diff"
+            trace = out / "trace.json"
+            report.write_text("# report\n")
+            patch_path.write_text("")
+            trace.write_text("{}")
+            return {"runId": "run_fake", "status": "success", "paths": {"report": str(report), "patch": str(patch_path), "trace": str(trace)}}
+
+        with tempfile.TemporaryDirectory(prefix="cifix-eval-rag-") as out:
+            with patch("cifix.eval.run_cifix", side_effect=fake_run_cifix):
+                run_eval(
+                    {
+                        "cases": "fixtures",
+                        "out": out,
+                        "vector-db": "chroma",
+                        "embedding-provider": "dashscope",
+                        "embedding-model": "text-embedding-v4",
+                        "embedding-dimensions": "1024",
+                    }
+                )
+        self.assertTrue(captured)
+        self.assertEqual(captured[0]["vector-db"], "chroma")
+        self.assertEqual(captured[0]["embedding-provider"], "dashscope")
+        self.assertEqual(captured[0]["embedding-model"], "text-embedding-v4")
 
 
 if __name__ == "__main__":

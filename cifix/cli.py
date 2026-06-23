@@ -10,7 +10,7 @@ from .dashboard import generate_dashboard
 from .eval import run_eval
 from .inspect import inspect_github
 from .model import model_config_from_env
-from .rag import embedding_config_from_flags, query_repair_rag
+from .rag import embedding_config_from_flags, query_repair_rag, vector_db_from_flags
 from .run import run_cifix
 from .status import inspect_status
 
@@ -141,11 +141,13 @@ Model mode:
 def print_doctor() -> None:
     config = model_config_from_env({"use-model": True})
     embedding_config = embedding_config_from_flags({})
+    vector_db = vector_db_from_flags({})
     print("CIFix Agent doctor")
     print(f"POE_API_KEY: {'set' if config.get('apiKey') else 'missing'}")
     print(f"POE_BASE_URL: {config['baseUrl']}")
     print(f"POE_MODEL: {config['model']}")
     print("Model mode default: disabled unless --use-model or CIFIX_USE_MODEL=1 is set")
+    print(f"VECTOR_DB: {vector_db}")
     print(f"EMBEDDING_PROVIDER: {embedding_config['provider']}")
     print(f"EMBEDDING_MODEL: {embedding_config['model']}")
     print(f"EMBEDDING_DIMENSIONS: {embedding_config['dimensions']}")
