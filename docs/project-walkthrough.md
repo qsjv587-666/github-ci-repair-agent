@@ -59,8 +59,16 @@
 | todo active filter assertion | #5 | #6 | source PR CI success |
 | lint unused variable | #7 | #8 | source PR CI success |
 | gated auto-merge counter demo | #9 | #11 | repair PR auto-merged, source PR CI success |
+| local watcher counter demo | #12 | #13 | watcher detected failed CI, created repair PR, commented on source PR |
 
 这说明当前项目不是只在本地 fixture 上跑通，而是已经完成真实 GitHub 仓库里的多类“失败 PR -> 修复 PR -> 合并修复 -> 原 PR CI 变绿”闭环。
+
+其中 watcher demo 的关键记录：
+
+- 源失败 PR：`https://github.com/qsjv587-666/ci-repair-agent-demo/pull/12`
+- Watcher 自动创建的修复 PR：`https://github.com/qsjv587-666/ci-repair-agent-demo/pull/13`
+- Watcher 自动写回的源 PR 评论：`https://github.com/qsjv587-666/ci-repair-agent-demo/pull/12#issuecomment-4777357720`
+- 本地 watcher artifact：`artifacts/watch-live-test/watch_20260623084205_c85f2035/watch-summary.json`
 
 ## 3. 代码大结构
 
@@ -175,7 +183,7 @@ python3 -m cifix.cli watch \
   --ssh-key ~/.ssh/github_ci_repair_agent
 ```
 
-它不是让 GitHub 直接访问你的电脑，而是本地 Agent 每隔一段时间主动查询目标仓库 open PR 的最新 CI 状态。发现 `failure` 后，系统用 `PR number + head SHA + workflow run id` 作为去重 key，只对新的失败触发一次修复流程，并把处理记录写入 `artifacts/watch-state/`。
+它不是让 GitHub 直接访问你的电脑，而是本地 Agent 每隔一段时间主动查询目标仓库 open PR 的最新 CI 状态。发现 `failure` 后，系统用 `PR number + head SHA + workflow run id` 作为去重 key，只对新的失败触发一次修复流程，并把处理记录写入 `artifacts/watch-state/`。如果同时传 `--comment-source-pr`，修复结束后还会把诊断摘要和 repair PR 链接写回源失败 PR。
 
 ### 5.2 输出
 
@@ -711,7 +719,7 @@ python3 -m cifix.cli eval \
 
 5. **落地验证**
    - 本地 fixture 4/4。
-   - 真实 GitHub demo：#1/#3/#5/#7 四类失败，agent 创建 #2/#4/#6/#8 修复 PR，合并修复 PR 后源 PR CI success。
+   - 真实 GitHub demo：#1/#3/#5/#7 四类失败，agent 创建 #2/#4/#6/#8 修复 PR，合并修复 PR 后源 PR CI success；#12 watcher 自动发现失败 CI，创建 #13 repair PR，并评论回源 PR。
 
 6. **工程边界**
    - 命令 allowlist。
