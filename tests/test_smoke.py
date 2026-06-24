@@ -341,9 +341,9 @@ class CifixSmokeTest(unittest.TestCase):
             run_eval({"cases": "fixtures", "out": str(Path(out) / "eval"), "memory-path": str(Path(out) / "memory.json")})
             dashboard = generate_dashboard({"artifacts": out})
             html = Path(dashboard["dashboardPath"]).read_text()
-            self.assertIn("CIFix Agent Dashboard", html)
+            self.assertIn("CIFix Agent 看板", html)
             self.assertIn("react-button-broken", html)
-            self.assertIn("latest eval success rate", html)
+            self.assertIn("最新 eval 成功率", html)
             self.assertIn("Top RAG Evidence", html)
 
     def test_status_writes_pr_ci_snapshot_artifacts(self) -> None:
@@ -373,7 +373,7 @@ class CifixSmokeTest(unittest.TestCase):
             self.assertIn("CI state: success", report)
             dashboard = generate_dashboard({"artifacts": out})
             html = Path(dashboard["dashboardPath"]).read_text()
-            self.assertIn("GitHub PR Status", html)
+            self.assertIn("GitHub PR 状态", html)
             self.assertIn("#7 Fix button state", html)
 
     def test_hybrid_rag_returns_bm25_and_vector_scores(self) -> None:

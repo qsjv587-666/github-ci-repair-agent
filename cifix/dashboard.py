@@ -115,11 +115,11 @@ def render_dashboard(root: Path, runs: list[dict[str, Any]], evals: list[dict[st
     success_runs = len([run for run in runs if run["status"] == "success"])
     latest_eval = evals[0] if evals else {}
     return f"""<!doctype html>
-<html lang="en">
+<html lang="zh-CN">
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
-  <title>CIFix Agent Dashboard</title>
+  <title>CIFix Agent 看板</title>
   <style>
     body {{ margin: 0; font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif; color: #172026; background: #f7f8fa; }}
     header {{ padding: 28px 36px 18px; background: #ffffff; border-bottom: 1px solid #dde3ea; }}
@@ -144,32 +144,32 @@ def render_dashboard(root: Path, runs: list[dict[str, Any]], evals: list[dict[st
 </head>
 <body>
   <header>
-    <h1>CIFix Agent Dashboard</h1>
-    <div class="muted">Generated {escape(datetime.now(timezone.utc).isoformat())} from {escape(str(root))}</div>
+    <h1>CIFix Agent 看板</h1>
+    <div class="muted">生成时间：{escape(datetime.now(timezone.utc).isoformat())} · 数据目录：{escape(str(root))}</div>
   </header>
   <main>
     <section class="grid">
-      <div class="metric"><strong>{len(runs)}</strong><span>runs</span></div>
-      <div class="metric"><strong>{success_runs}</strong><span>successful runs</span></div>
-      <div class="metric"><strong>{len(evals)}</strong><span>eval reports</span></div>
-      <div class="metric"><strong>{len(inspections)}</strong><span>GitHub inspections</span></div>
-      <div class="metric"><strong>{len(statuses)}</strong><span>GitHub status snapshots</span></div>
-      <div class="metric"><strong>{escape(str(latest_eval.get("successRate", "n/a")))}</strong><span>latest eval success rate</span></div>
+      <div class="metric"><strong>{len(runs)}</strong><span>修复 run 总数</span></div>
+      <div class="metric"><strong>{success_runs}</strong><span>成功 run</span></div>
+      <div class="metric"><strong>{len(evals)}</strong><span>eval 报告</span></div>
+      <div class="metric"><strong>{len(inspections)}</strong><span>GitHub inspect 记录</span></div>
+      <div class="metric"><strong>{len(statuses)}</strong><span>GitHub status 快照</span></div>
+      <div class="metric"><strong>{escape(str(latest_eval.get("successRate", "n/a")))}</strong><span>最新 eval 成功率</span></div>
     </section>
     <section>
-      <h2>Recent Runs</h2>
+      <h2>最近修复 Runs</h2>
       {render_runs_table(root, runs)}
     </section>
     <section>
-      <h2>GitHub PR Status</h2>
+      <h2>GitHub PR 状态</h2>
       {render_status_table(root, statuses)}
     </section>
     <section>
-      <h2>Eval Reports</h2>
+      <h2>Eval 报告</h2>
       {render_evals_table(root, evals)}
     </section>
     <section>
-      <h2>GitHub Inspections</h2>
+      <h2>GitHub Inspect 记录</h2>
       {render_inspections_table(root, inspections)}
     </section>
   </main>
@@ -180,26 +180,26 @@ def render_dashboard(root: Path, runs: list[dict[str, Any]], evals: list[dict[st
 
 def render_runs_table(root: Path, runs: list[dict[str, Any]]) -> str:
     if not runs:
-        return "<p class=\"muted\">No runs found.</p>"
+        return "<p class=\"muted\">暂无 run 记录。</p>"
     rows = "\n".join(
         f"""<tr>
   <td>{link(root, run["path"] / "report.md", run["id"])}</td>
   <td><span class="pill {'warn' if run['status'] != 'success' else ''}">{escape(run["status"])}</span></td>
   <td>{escape(run["platform"])} / {escape(run["project"])}<br>{external_link(run.get("sourcePullUrl"), f"source PR #{run.get('sourcePullNumber')}")}</td>
   <td>{escape(run["failureType"])}<br><span class="muted">{escape(run["errorCode"])}</span></td>
-  <td>{escape(str(run["candidateCount"]))} candidates<br>{escape(str(run["passedCandidates"]))} passed<br><span class="muted">{escape(str(run.get("bestCandidate") or "n/a"))} risk={escape(str(run.get("bestRisk") or "n/a"))}</span></td>
+  <td>{escape(str(run["candidateCount"]))} 个 candidates<br>{escape(str(run["passedCandidates"]))} 个通过<br><span class="muted">{escape(str(run.get("bestCandidate") or "n/a"))} risk={escape(str(run.get("bestRisk") or "n/a"))}</span></td>
   <td>{escape(str(run.get("topRagId") or "none"))}<br><span class="muted">{escape(str(run.get("topRagSource") or ""))} score={escape(str(run.get("topRagScore") or "n/a"))}</span></td>
   <td>{render_repair_cell(run)}</td>
-  <td>{link(root, run["path"] / "patch.diff", "patch")} · {link(root, run["path"] / "trace.json", "trace")} · {link(root, run["path"] / "repair-playbook-hits.json", "rag")} · {link(root, run["path"] / "github-write.json", "write")}</td>
+  <td>{link(root, run["path"] / "patch.diff", "patch")} · {link(root, run["path"] / "trace.json", "trace")} · {link(root, run["path"] / "repair-playbook-hits.json", "RAG")} · {link(root, run["path"] / "github-write.json", "write-back")}</td>
 </tr>"""
         for run in runs[:50]
     )
-    return f"<table><thead><tr><th>Run</th><th>Status</th><th>Project</th><th>Failure</th><th>Patch Tournament</th><th>Top RAG Evidence</th><th>GitHub Write</th><th>Artifacts</th></tr></thead><tbody>{rows}</tbody></table>"
+    return f"<table><thead><tr><th>Run</th><th>状态</th><th>项目</th><th>失败类型</th><th>Patch Tournament</th><th>Top RAG Evidence</th><th>GitHub 写回</th><th>Artifacts</th></tr></thead><tbody>{rows}</tbody></table>"
 
 
 def render_status_table(root: Path, statuses: list[dict[str, Any]]) -> str:
     if not statuses:
-        return "<p class=\"muted\">No GitHub status snapshots found.</p>"
+        return "<p class=\"muted\">暂无 GitHub status 快照。</p>"
     rows = "\n".join(
         f"""<tr>
   <td>{link(root, item["path"] / "report.md", item["id"])}</td>
@@ -210,12 +210,12 @@ def render_status_table(root: Path, statuses: list[dict[str, Any]]) -> str:
 </tr>"""
         for item in statuses[:30]
     )
-    return f"<table><thead><tr><th>Snapshot</th><th>Pull Request</th><th>CI</th><th>Branches</th><th>Latest Run</th></tr></thead><tbody>{rows}</tbody></table>"
+    return f"<table><thead><tr><th>快照</th><th>Pull Request</th><th>CI</th><th>分支</th><th>最新 Run</th></tr></thead><tbody>{rows}</tbody></table>"
 
 
 def render_evals_table(root: Path, evals: list[dict[str, Any]]) -> str:
     if not evals:
-        return "<p class=\"muted\">No eval reports found.</p>"
+        return "<p class=\"muted\">暂无 eval 报告。</p>"
     rows = "\n".join(
         f"""<tr>
   <td>{link(root, item["path"] / "report.md", item.get("evalId", item["path"].name))}</td>
@@ -226,12 +226,12 @@ def render_evals_table(root: Path, evals: list[dict[str, Any]]) -> str:
 </tr>"""
         for item in evals[:20]
     )
-    return f"<table><thead><tr><th>Eval</th><th>Cases</th><th>Success</th><th>Rate</th><th>Avg Duration</th></tr></thead><tbody>{rows}</tbody></table>"
+    return f"<table><thead><tr><th>Eval</th><th>Cases</th><th>成功数</th><th>成功率</th><th>平均耗时</th></tr></thead><tbody>{rows}</tbody></table>"
 
 
 def render_inspections_table(root: Path, inspections: list[dict[str, Any]]) -> str:
     if not inspections:
-        return "<p class=\"muted\">No GitHub inspections found.</p>"
+        return "<p class=\"muted\">暂无 GitHub inspect 记录。</p>"
     rows = "\n".join(
         f"""<tr>
   <td>{link(root, item["path"] / "report.md", item["id"])}</td>
@@ -243,7 +243,7 @@ def render_inspections_table(root: Path, inspections: list[dict[str, Any]]) -> s
 </tr>"""
         for item in inspections[:30]
     )
-    return f"<table><thead><tr><th>Inspect</th><th>Repo</th><th>PR</th><th>Run</th><th>Job</th><th>Log Chars</th></tr></thead><tbody>{rows}</tbody></table>"
+    return f"<table><thead><tr><th>Inspect</th><th>Repo</th><th>PR</th><th>Run</th><th>Job</th><th>日志字符数</th></tr></thead><tbody>{rows}</tbody></table>"
 
 
 def link(root: Path, target: Path, label: str) -> str:
@@ -256,7 +256,7 @@ def link(root: Path, target: Path, label: str) -> str:
 
 def external_link(url: str | None, label: str) -> str:
     if not url:
-        return '<span class="muted">n/a</span>'
+        return '<span class="muted">暂无</span>'
     return f"<a href=\"{escape(url)}\">{escape(label)}</a>"
 
 
@@ -268,14 +268,14 @@ def render_repair_cell(run: dict[str, Any]) -> str:
     if run.get("autoMergeStatus"):
         auto_merge = f"<br><span class=\"muted\">auto-merge: {escape(str(run.get('autoMergeStatus')))}"
         if run.get("sourceCiAfterMerge"):
-            auto_merge += f" / source CI: {escape(str(run.get('sourceCiAfterMerge')))}"
+            auto_merge += f" / 源 PR CI: {escape(str(run.get('sourceCiAfterMerge')))}"
         auto_merge += "</span>"
     return f"<span class=\"pill {status_class(status)}\">{escape(str(status))}</span><br>{external_link(run.get('repairPullUrl'), repair_label)}{branch}{auto_merge}"
 
 
 def render_latest_run(run: dict[str, Any] | None) -> str:
     if not run:
-        return '<span class="muted">n/a</span>'
+        return '<span class="muted">暂无</span>'
     return f"{external_link(run.get('htmlUrl'), str(run.get('id') or 'run'))}<br><span class=\"muted\">{escape(str(run.get('status')))} / {escape(str(run.get('conclusion')))}</span>"
 
 
