@@ -15,10 +15,10 @@ from cifix.github import load_github_context, parse_github_url
 from cifix.inspect import inspect_github
 from cifix.rag import DashScopeEmbeddingProvider, HybridRepairRAG, ZhipuEmbeddingProvider, build_repair_query, create_embedding_provider
 from cifix.rag import vector_db_from_flags
-from cifix.run import run_cifix
+from cifix.run import choose_sandbox_for_repo, run_cifix
 from cifix.status import inspect_status
 from cifix.tools.command import run_command
-from cifix.tools.workspace import infer_setup_command
+from cifix.tools.workspace import infer_command, infer_setup_command
 from cifix.watch import build_dedupe_key, run_watch_once
 
 
@@ -48,12 +48,13 @@ class CifixSmokeTest(unittest.TestCase):
     def test_eval_runner_summarizes_multiple_fixture_cases(self) -> None:
         with tempfile.TemporaryDirectory(prefix="cifix-eval-") as out:
             result = run_eval({"cases": "fixtures", "out": out, "memory-path": str(Path(out) / "memory.json")})
-            self.assertEqual(result["total"], 4)
-            self.assertEqual(result["success"], 4)
+            self.assertEqual(result["total"], 5)
+            self.assertEqual(result["success"], 5)
             self.assertEqual(result["successRate"], 1)
             report = Path(result["reportPath"]).read_text()
             self.assertIn("counter-increment-broken", report)
             self.assertIn("lint-unused-var-broken", report)
+            self.assertIn("python-unittest-broken", report)
             self.assertIn("react-button-broken", report)
             self.assertIn("todo-filter-broken", report)
 
@@ -61,12 +62,30 @@ class CifixSmokeTest(unittest.TestCase):
         with tempfile.TemporaryDirectory(prefix="cifix-baseline-") as out:
             result = run_eval({"cases": "fixtures", "out": out, "memory-path": str(Path(out) / "memory.json"), "compare-baselines": True})
             summary = json.loads(Path(result["summaryPath"]).read_text())
-            self.assertEqual(summary["caseCount"], 4)
+            self.assertEqual(summary["caseCount"], 5)
             self.assertEqual(summary["variants"], ["full", "no_memory", "single_candidate"])
-            self.assertEqual(summary["total"], 12)
+            self.assertEqual(summary["total"], 15)
             self.assertEqual(len(summary["variantSummary"]), 3)
             report = Path(result["reportPath"]).read_text()
             self.assertIn("Variant Summary", report)
+
+    def test_python_fixture_can_be_repaired(self) -> None:
+        with tempfile.TemporaryDirectory(prefix="cifix-python-fixture-") as out:
+            result = run_cifix(
+                {
+                    "repo": "fixtures/python-unittest-broken",
+                    "command": "python3 -m unittest",
+                    "log": "fixtures/python-unittest-broken/ci-fail.log",
+                    "out": out,
+                    "memory-path": str(Path(out) / "memory.json"),
+                }
+            )
+            self.assertEqual(result["status"], "success")
+            run_dir = Path(out) / result["runId"]
+            fingerprint = json.loads((run_dir / "failure-fingerprint.json").read_text())
+            self.assertEqual(fingerprint["language"], "python")
+            patch = (run_dir / "patch.diff").read_text()
+            self.assertIn("return a + b", patch)
 
     def test_command_policy_rejects_shell_control_tokens(self) -> None:
         result = run_command("npm test && rm -rf /tmp/nope", ".")
@@ -115,6 +134,14 @@ class CifixSmokeTest(unittest.TestCase):
             self.assertIsNone(infer_setup_command(root, enabled=True))
             (root / "package-lock.json").write_text("{}")
             self.assertEqual(infer_setup_command(root, enabled=True), "npm ci")
+
+    def test_python_command_inference(self) -> None:
+        with tempfile.TemporaryDirectory(prefix="cifix-python-infer-") as tmp:
+            root = Path(tmp)
+            (root / "tests").mkdir()
+            (root / "tests" / "test_sample.py").write_text("import unittest\n")
+            self.assertEqual(infer_setup_command(root, enabled=True), None)
+            self.assertEqual(infer_command(root), "python3 -m unittest")
 
     def test_github_pr_url_resolves_failed_run_job_and_logs(self) -> None:
         def fake_json(path: str, token: str | None):
@@ -419,6 +446,14 @@ class CifixSmokeTest(unittest.TestCase):
         with patch.dict(os.environ, {"CIFIX_VECTOR_DB": "chroma"}):
             self.assertEqual(vector_db_from_flags({}), "chroma")
             self.assertEqual(vector_db_from_flags({"vector-db": "sqlite"}), "sqlite")
+
+    def test_docker_sandbox_auto_selects_python_image(self) -> None:
+        sandbox = choose_sandbox_for_repo(
+            {},
+            {"mode": "docker", "image": "node:20", "network": "bridge"},
+            {"languages": ["python"]},
+        )
+        self.assertEqual(sandbox["image"], "python:3.12")
 
     def test_eval_passes_rag_flags_to_runs(self) -> None:
         captured = []

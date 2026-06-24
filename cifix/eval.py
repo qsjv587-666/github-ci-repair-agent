@@ -85,6 +85,9 @@ def discover_cases(cases_root: Path) -> list[dict[str, Any]]:
         log_path = entry / "ci-fail.log"
         if package_json.exists() and log_path.exists():
             cases.append({"name": entry.name, "path": entry, "log": log_path, "command": "npm test"})
+            continue
+        if log_path.exists() and any(path.suffix == ".py" for path in entry.rglob("*.py")):
+            cases.append({"name": entry.name, "path": entry, "log": log_path, "command": "python3 -m unittest"})
     return cases
 
 

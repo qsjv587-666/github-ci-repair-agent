@@ -30,7 +30,7 @@ It does not support in MVP:
 - GitHub webhook / GitHub App event ingestion.
 - Running arbitrary shell commands.
 - Claiming support for all languages/build systems.
-- Automatic Docker image selection for every language ecosystem.
+- Automatic Docker image selection for every language ecosystem beyond the current Node and Python-only defaults.
 
 ## Demo Commands
 
@@ -175,15 +175,15 @@ python3 -m unittest discover -s tests
 24 tests OK
 
 python3 -m cifix.cli eval --cases fixtures --out artifacts/eval
-cases: 4
-total_runs: 4
-success: 4
+cases: 5
+total_runs: 5
+success: 5
 success_rate: 1.0
 
 python3 -m cifix.cli eval --cases fixtures --out artifacts/eval-baselines --compare-baselines
-cases: 4
-total_runs: 12
-success: 12
+cases: 5
+total_runs: 15
+success: 15
 success_rate: 1.0
 
 python3 -m cifix.cli inspect --url https://github.com/octocat/Hello-World/pull/1 --out artifacts
@@ -198,10 +198,10 @@ Suggested description:
 
 Suggested metrics to report from the current MVP:
 
-- 4 local CI-failure fixtures.
-- 4 / 4 success on full eval.
-- 12 / 12 successful runs in baseline comparison.
-- 9 unit/smoke tests.
+- 5 local CI-failure fixtures, including Node / JavaScript and Python unittest cases.
+- 5 / 5 success on full eval.
+- 15 / 15 successful runs in baseline comparison.
+- 26 unit/smoke tests.
 - Read-only GitHub inspect verified on a public PR.
 - Hybrid RAG trace includes BM25 score, vector score, hybrid score, matched terms, vector backend, embedding provider/model, vector DB path, and index path.
 

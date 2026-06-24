@@ -2,7 +2,7 @@
 
 Python implementation of a local runnable MVP for the CI failure self-healing agent described in `docs/project-plan.md`.
 
-The Agent code is under `cifix/`. The `fixtures/*/package.json` files belong to sample projects being repaired; they are not the Agent implementation.
+The Agent code is under `cifix/`. The `fixtures/*` directories are sample projects being repaired; they are not the Agent implementation.
 
 Full project walkthrough: `docs/project-walkthrough.md`.
 
@@ -147,7 +147,7 @@ python3 -m cifix.cli run \
   --token-env GITHUB_TOKEN
 ```
 
-To run setup, reproduction, and candidate verification inside Docker instead of directly on the host, add `--sandbox docker`. The default image is `node:20`; use `--docker-image` to override it.
+To run setup, reproduction, and candidate verification inside Docker instead of directly on the host, add `--sandbox docker`. CIFix selects `node:20` for Node projects and `python:3.12` for Python-only projects when no image is specified; use `--docker-image` to override it.
 
 ```bash
 python3 -m cifix.cli run \
@@ -266,11 +266,12 @@ Current fixture set:
 - `counter-increment-broken`
 - `todo-filter-broken`
 - `lint-unused-var-broken`
+- `python-unittest-broken`
 
 Latest verified local eval:
 
 ```text
-cases: 4
-success: 4
+cases: 5
+success: 5
 success_rate: 1
 ```

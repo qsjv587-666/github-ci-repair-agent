@@ -51,6 +51,7 @@ def generate_rule_patch_candidates(workspace_dir: Path, playbook_hits: list[dict
         ("src/login-button.js", "disabled: false", "disabled: Boolean(loading)", "patch_source_loading_disabled", "The source state ignores loading and always leaves the button enabled."),
         ("src/counter.js", "return count;", "return count + 1;", "patch_counter_increment", "increment should return the next count rather than the current count."),
         ("src/todos.js", "return todos;", "return todos.filter((todo) => !todo.completed);", "patch_filter_active_todos", "getActiveTodos should filter out completed todos."),
+        ("src/calculator.py", "return a - b", "return a + b", "patch_python_add_numbers", "add should return the sum rather than subtracting the second argument."),
     ]
     for file, old, new, candidate_id, hypothesis in rules:
         file_path = workspace_dir / file

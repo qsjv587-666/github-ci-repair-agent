@@ -188,10 +188,10 @@ python3 -m cifix.cli watch \
 如果希望把测试执行放进容器里，可以加：
 
 ```bash
---sandbox docker --docker-image node:20
+--sandbox docker
 ```
 
-这样 setup、失败复现和候选 patch 验证都会在 Docker 容器里执行，而不是直接在宿主机执行。workspace 仍然是本地 artifact 目录，但会以 volume 形式挂载到容器的 `/workspace`。
+这样 setup、失败复现和候选 patch 验证都会在 Docker 容器里执行，而不是直接在宿主机执行。workspace 仍然是本地 artifact 目录，但会以 volume 形式挂载到容器的 `/workspace`。当前会对 Node 项目默认选择 `node:20`，对纯 Python 项目默认选择 `python:3.12`；复杂项目也可以显式传 `--docker-image`。
 
 ### 5.2 输出
 
@@ -280,10 +280,10 @@ git clone PR head repo
 当前也支持可选 Docker sandbox：
 
 ```bash
---sandbox docker --docker-image node:20
+--sandbox docker
 ```
 
-开启后，setup、失败复现和候选 patch 验证命令会通过 Docker 执行。这样可以把测试运行环境和宿主机隔离开，同时保留本地 artifact workspace 作为可查看的修复现场。
+开启后，setup、失败复现和候选 patch 验证命令会通过 Docker 执行。这样可以把测试运行环境和宿主机隔离开，同时保留本地 artifact workspace 作为可查看的修复现场。系统会根据仓库语言做基础镜像选择，也允许用 `--docker-image` 手动覆盖。
 
 ## 8. Failure Fingerprint 是什么
 
@@ -600,12 +600,13 @@ Dashboard 在 `cifix/dashboard.py`，它会扫描 artifacts 下的 run、eval、
 
 代码在 `cifix/eval.py`。
 
-本地 fixture 覆盖 4 类典型失败：
+本地 fixture 覆盖 5 类典型失败。这里的 fixture 不是“错误类型”本身，而是一个故意带有 CI 失败的最小样例项目，用来稳定复现、评测和回归：
 
 - `react-button-broken`
 - `counter-increment-broken`
 - `todo-filter-broken`
 - `lint-unused-var-broken`
+- `python-unittest-broken`
 
 基础 eval：
 
@@ -628,7 +629,7 @@ python3 -m cifix.cli eval \
 - `no_memory`：关闭历史记忆，观察 RAG 的贡献。
 - `single_candidate`：只保留一个候选 patch，观察 tournament 的贡献。
 
-当前本地 eval 已验证 4/4 修复成功。对简历来说，这比“我做了一个 agent demo”更有说服力，因为它有可重复的评测样例和对照实验。
+当前本地 eval 已验证 5/5 修复成功，覆盖 Node / JavaScript 和 Python unittest 基础场景。对简历来说，这比“我做了一个 agent demo”更有说服力，因为它有可重复的评测样例和对照实验。
 
 ## 16. 权限模式
 
@@ -842,7 +843,7 @@ GitHub failed PR
 
 如果要更具体：
 
-- 本地 fixture 覆盖断言失败、lint 失败等场景。
+- 本地 fixture 覆盖 JavaScript 断言失败、lint 失败、Python unittest 断言失败等场景。
 - eval 可以对比完整系统、去掉记忆、只生成单候选三种模式。
 - 真实 GitHub demo 覆盖手动触发、watcher 自动触发、repair PR 创建、源 PR 评论和 gated auto-merge。
 - 每次 run 都有 trace、report、patch diff、RAG evidence 和 GitHub write-back artifact。
@@ -859,7 +860,7 @@ GitHub failed PR
 
 可以主动说：
 
-> 当前版本主要验证 Node / JavaScript 场景，复杂多语言项目还需要扩展 repo mapper、测试命令推断和 patch 生成策略。当前触发方式是本地 watcher 轮询，不是 GitHub App webhook。Docker sandbox 已支持 setup、reproduce 和 patch verification 命令，但还没有做到按不同语言自动选择镜像。更多 benchmark case、RAG 效果指标和更丰富的 dashboard 是下一阶段优化方向。
+> 当前版本已经覆盖 Node / JavaScript 和 Python unittest 基础场景，复杂多语言项目还需要继续扩展 repo mapper、测试命令推断和 patch 生成策略。当前触发方式是本地 watcher 轮询，不是 GitHub App webhook。Docker sandbox 已支持 setup、reproduce 和 patch verification 命令，并能对 Node 与 Python-only 项目做基础镜像选择。更多 benchmark case、RAG 效果指标和更丰富的 dashboard 是下一阶段优化方向。
 
 这样回答会显得比较成熟：既说明项目价值，也知道边界。
 
@@ -867,10 +868,10 @@ GitHub failed PR
 
 为了面试时讲得可信，需要主动说明当前边界：
 
-- 目前主要验证 Node / JavaScript demo 项目。
+- 目前已验证 Node / JavaScript demo 项目和 Python unittest demo 项目；更复杂的 Python 依赖、pytest 插件、monorepo 还需要继续扩展。
 - patch 生成仍有规则 fallback，真实复杂项目需要更多语言和框架适配。
 - 当前是 CLI 工作台，可以通过本地 watcher 轮询 GitHub 触发修复，但还不是 GitHub webhook / GitHub App 服务。
-- Docker sandbox 需要本机安装 Docker；当前默认镜像面向 Node / JavaScript 项目，其他语言需要显式指定镜像和命令。
+- Docker sandbox 需要本机安装 Docker；当前能为 Node 和 Python-only 项目选择基础镜像，复杂多语言项目仍建议显式指定镜像和命令。
 - 默认不会自动 merge，merge 仍由人完成。
 - DashScope embedding 如果账号未开通对应模型权限，需要用 `hash` provider 或换可用 embedding。
 - GitHub 写回需要用户配置 token 和 SSH key。
@@ -899,7 +900,7 @@ GitHub failed PR
    - Patch Tournament。
 
 5. **落地验证**
-   - 本地 fixture 4/4。
+   - 本地 fixture 5/5。
    - 真实 GitHub demo：#1/#3/#5/#7 四类失败，agent 创建 #2/#4/#6/#8 修复 PR，合并修复 PR 后源 PR CI success；#12 watcher 自动发现失败 CI，创建 #13 repair PR，并评论回源 PR。
 
 6. **工程边界**

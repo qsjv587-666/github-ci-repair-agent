@@ -59,7 +59,7 @@ def copy_repo(source: Path, destination: Path) -> None:
         raise FileNotFoundError(f"Repo path does not exist: {source}")
     if destination.exists():
         shutil.rmtree(destination)
-    ignore = shutil.ignore_patterns("node_modules", ".git")
+    ignore = shutil.ignore_patterns("node_modules", "__pycache__", ".pytest_cache", ".git")
     shutil.copytree(source, destination, ignore=ignore)
 
 
@@ -86,18 +86,23 @@ def read_log(log_path: str | None) -> str:
 def infer_command(workspace_dir: Path) -> str:
     if (workspace_dir / "package.json").exists():
         return "npm test"
+    if (workspace_dir / "tests").exists() or any(path.name.startswith("test_") and path.suffix == ".py" for path in workspace_dir.rglob("*.py")):
+        return "python3 -m unittest"
     return "echo 'No command inferred'"
 
 
 def infer_setup_command(workspace_dir: Path, *, enabled: bool) -> str | None:
-    if not enabled or not (workspace_dir / "package.json").exists():
+    if not enabled:
         return None
-    if (workspace_dir / "pnpm-lock.yaml").exists():
-        return "pnpm install --frozen-lockfile"
-    if (workspace_dir / "package-lock.json").exists():
-        return "npm ci"
-    if (workspace_dir / "yarn.lock").exists():
-        return "yarn install --frozen-lockfile"
+    if (workspace_dir / "package.json").exists():
+        if (workspace_dir / "pnpm-lock.yaml").exists():
+            return "pnpm install --frozen-lockfile"
+        if (workspace_dir / "package-lock.json").exists():
+            return "npm ci"
+        if (workspace_dir / "yarn.lock").exists():
+            return "yarn install --frozen-lockfile"
+    if (workspace_dir / "requirements.txt").exists():
+        return "python -m pip install -r requirements.txt"
     return None
 
 
@@ -108,10 +113,22 @@ def map_repo(workspace_dir: Path) -> dict[str, Any]:
     if package_json_path.exists():
         package_json = json.loads(package_json_path.read_text())
 
+    languages = []
+    if any(file.endswith((".ts", ".tsx")) for file in files):
+        languages.append("typescript")
+    if any(file.endswith((".js", ".jsx")) for file in files):
+        languages.append("javascript")
+    if any(file.endswith(".py") for file in files):
+        languages.append("python")
+    if not languages:
+        languages.append("unknown")
+
+    package_manager = "pnpm" if (workspace_dir / "pnpm-lock.yaml").exists() else "npm" if package_json_path.exists() else "pip" if (workspace_dir / "requirements.txt").exists() else None
+
     return {
         "files": files,
-        "languages": ["typescript"] if any(file.endswith((".ts", ".tsx")) for file in files) else ["javascript"],
-        "packageManager": "pnpm" if (workspace_dir / "pnpm-lock.yaml").exists() else "npm",
+        "languages": languages,
+        "packageManager": package_manager,
         "scripts": (package_json or {}).get("scripts", {}),
     }
 

@@ -17,6 +17,11 @@ DEFAULT_ALLOWED_PREFIXES = (
     "pnpm typecheck",
     "yarn test",
     "node --test",
+    "python -m unittest",
+    "python3 -m unittest",
+    "pytest",
+    "python -m pytest",
+    "python3 -m pytest",
 )
 
 DEFAULT_SETUP_ALLOWED_PREFIXES = (
@@ -26,6 +31,9 @@ DEFAULT_SETUP_ALLOWED_PREFIXES = (
     "pnpm install",
     "yarn install --frozen-lockfile",
     "yarn install",
+    "pip install -r requirements.txt",
+    "python -m pip install -r requirements.txt",
+    "python3 -m pip install -r requirements.txt",
 )
 
 FORBIDDEN_SHELL_TOKENS = (";", "&&", "||", "|", ">", "<", "`", "$(", "\n")

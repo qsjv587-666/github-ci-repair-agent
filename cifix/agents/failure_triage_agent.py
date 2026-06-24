@@ -25,8 +25,9 @@ def create_failure_fingerprint(raw_log: str, command: str, repo_map: dict[str, A
         failure_type = "test_assertion_failure"
     else:
         failure_type = "unknown_failure"
-    failed_files = sorted(set(re.findall(r"\b(?:src|test)/[A-Za-z0-9._/-]+\.(?:js|jsx|ts|tsx)\b", combined)))
-    language = "typescript" if "typescript" in repo_map.get("languages", []) else "javascript"
+    failed_files = sorted(set(re.findall(r"\b(?:src|test|tests)/[A-Za-z0-9._/-]+\.(?:js|jsx|ts|tsx|py)\b", combined)))
+    languages = repo_map.get("languages", [])
+    language = "python" if "python" in languages else "typescript" if "typescript" in languages else "javascript"
     area = "ui_state" if any("button" in file for file in failed_files) else "general"
     return {
         "platform": "github" if github_context else "local",
