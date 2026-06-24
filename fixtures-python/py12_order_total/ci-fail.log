@@ -1,0 +1,7 @@
+FAIL: test_total_includes_tax (test_orders.OrdersTest)
+Traceback (most recent call last):
+  File "test_orders.py", line 9, in test_total_includes_tax
+    self.assertEqual(grand_total(orders), 16.5)
+AssertionError: 15 != 16.5
+
+FAILED (failures=1)

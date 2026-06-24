@@ -63,5 +63,44 @@
     "successCount": 8,
     "failureCount": 1,
     "confidence": 0.89
+  },
+  {
+    "id": "playbook_python_assertion_source_contract",
+    "failureSignature": "python:test_assertion:ASSERTION:source_contract",
+    "failureType": "test_assertion_failure",
+    "errorCode": "ASSERTION",
+    "language": "python",
+    "changedFilePatterns": ["src/**/*.py", "tests/**/*.py"],
+    "strategy": "For Python assertion failures, prefer fixing the source contract or data transformation before weakening tests.",
+    "verificationCommands": ["python3 -m unittest"],
+    "successCount": 10,
+    "failureCount": 1,
+    "confidence": 0.82
+  },
+  {
+    "id": "playbook_python_import_refactor",
+    "failureSignature": "python:import_error:ModuleNotFoundError:refactor",
+    "failureType": "import_error",
+    "errorCode": "ModuleNotFoundError",
+    "language": "python",
+    "changedFilePatterns": ["src/**/*.py", "tests/**/*.py"],
+    "strategy": "For Python import errors after refactors, update call sites to the new module path instead of adding compatibility shims first.",
+    "verificationCommands": ["python3 -m unittest"],
+    "successCount": 4,
+    "failureCount": 1,
+    "confidence": 0.76
+  },
+  {
+    "id": "playbook_python_missing_data_guard",
+    "failureSignature": "python:runtime_error:KeyError:missing_data",
+    "failureType": "runtime_error",
+    "errorCode": "KeyError",
+    "language": "python",
+    "changedFilePatterns": ["src/**/*.py"],
+    "strategy": "For missing optional data, add a narrow default or guard at the boundary where external input is read.",
+    "verificationCommands": ["python3 -m unittest"],
+    "successCount": 5,
+    "failureCount": 1,
+    "confidence": 0.74
   }
 ]

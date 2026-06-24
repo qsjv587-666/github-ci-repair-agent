@@ -1,0 +1,7 @@
+FAIL: test_uses_public_full_name_field (test_serializer.SerializerTest)
+Traceback (most recent call last):
+  File "test_serializer.py", line 8, in test_uses_public_full_name_field
+    self.assertEqual(serialize_user(User(1, "Grace Hopper")), {"id": 1, "full_name": "Grace Hopper"})
+AssertionError: {'id': 1, 'name': 'Grace Hopper'} != {'id': 1, 'full_name': 'Grace Hopper'}
+
+FAILED (failures=1)

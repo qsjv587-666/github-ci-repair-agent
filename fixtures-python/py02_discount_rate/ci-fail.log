@@ -1,0 +1,7 @@
+FAIL: test_enterprise_discount_uses_contract_rate (test_billing.BillingTest)
+Traceback (most recent call last):
+  File "test_billing.py", line 8, in test_enterprise_discount_uses_contract_rate
+    self.assertEqual(enterprise_discount(100), 80)
+AssertionError: 90.0 != 80
+
+FAILED (failures=1)

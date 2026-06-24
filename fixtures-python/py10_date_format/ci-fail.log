@@ -1,0 +1,9 @@
+ERROR: test_parse_iso_date (test_dates.DatesTest)
+Traceback (most recent call last):
+  File "test_dates.py", line 8, in test_parse_iso_date
+    self.assertEqual(parse_iso_date("2026-06-24").isoformat(), "2026-06-24")
+  File "src/dates.py", line 5, in parse_iso_date
+    return datetime.strptime(value, "%Y/%m/%d").date()
+ValueError: time data '2026-06-24' does not match format '%Y/%m/%d'
+
+FAILED (errors=1)

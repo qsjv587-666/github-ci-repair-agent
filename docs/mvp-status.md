@@ -21,7 +21,9 @@ It supports:
 - Optional `watch` mode: poll a target GitHub repository for open PRs whose latest CI failed, trigger the repair workflow once per failed head SHA / workflow run, and optionally comment back on the source PR.
 - Optional gated auto-merge of low-risk repair PRs with `--auto-merge-repair-pr`.
 - Eval runner with baseline comparison.
-- Static dashboard over run/eval/inspect artifacts.
+- Python benchmark eval suite with 15 unittest-based CI failure cases.
+- RAG evidence metrics: Hit@1, Hit@3, MRR, and Coverage.
+- Static Chinese dashboard over run/eval/inspect/status artifacts, including latest eval and RAG metrics.
 
 It does not support in MVP:
 
@@ -56,6 +58,15 @@ Eval:
 
 ```bash
 python3 -m cifix.cli eval --cases fixtures --out artifacts/eval
+```
+
+Python benchmark eval:
+
+```bash
+python3 -m cifix.cli eval \
+  --cases fixtures-python \
+  --out artifacts/eval-python15 \
+  --memory-path artifacts/memory/verified-repairs.json
 ```
 
 Baseline comparison:
@@ -172,13 +183,20 @@ Latest local verification:
 ```text
 python3 -m compileall -q cifix tests
 python3 -m unittest discover -s tests
-24 tests OK
+29 tests OK
 
 python3 -m cifix.cli eval --cases fixtures --out artifacts/eval
 cases: 5
 total_runs: 5
 success: 5
 success_rate: 1.0
+
+python3 -m cifix.cli eval --cases fixtures-python --out artifacts/eval-python15 --memory-path artifacts/memory/verified-repairs.json
+cases: 15
+total_runs: 15
+success: 15
+success_rate: 1.0
+RAG metrics: Hit@1 0.067, Hit@3 0.667, MRR 0.38, Coverage 0.867
 
 python3 -m cifix.cli eval --cases fixtures --out artifacts/eval-baselines --compare-baselines
 cases: 5
@@ -198,16 +216,20 @@ Suggested description:
 
 Suggested metrics to report from the current MVP:
 
-- 5 local CI-failure fixtures, including Node / JavaScript and Python unittest cases.
-- 5 / 5 success on full eval.
+- 5 mixed-language CI-failure fixtures, including Node / JavaScript and Python unittest cases.
+- 15 Python-only benchmark fixtures under `fixtures-python`.
+- 5 / 5 success on mixed-language full eval.
+- 15 / 15 success on Python benchmark eval.
 - 15 / 15 successful runs in baseline comparison.
-- 26 unit/smoke tests.
+- 29 unit/smoke tests.
 - Read-only GitHub inspect verified on a public PR.
+- Real GitHub Python demo: source PR #14 failed on `KeyError: 'name'`; CIFix created repair PR #15; after merging #15 into the source branch, PR #14 CI reran successfully.
 - Hybrid RAG trace includes BM25 score, vector score, hybrid score, matched terms, vector backend, embedding provider/model, vector DB path, and index path.
+- Latest Python benchmark RAG metrics: Hit@1 0.067, Hit@3 0.667, MRR 0.38, Coverage 0.867.
 
 ## Next Non-MVP Extensions
 
-- Add more fixtures until at least 20 cases.
+- Add more real-world Python cases beyond the current 15-case synthetic benchmark.
 - Add a stable fork-based GitHub demo repo with intentionally failing PRs.
 - Add optional GitHub draft PR creation behind explicit approval.
 - Add automatic Docker image selection for more language ecosystems.

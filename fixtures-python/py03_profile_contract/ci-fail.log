@@ -1,0 +1,9 @@
+ERROR: test_render_profile_uses_service_contract (test_report.ReportTest)
+Traceback (most recent call last):
+  File "test_report.py", line 9, in test_render_profile_uses_service_contract
+    self.assertEqual(render_profile(profile), "User: Ada Lovelace")
+  File "src/report.py", line 2, in render_profile
+    return f"User: {profile['name']}"
+KeyError: 'name'
+
+FAILED (errors=1)

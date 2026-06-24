@@ -1,0 +1,7 @@
+FAIL: test_seconds_are_converted_to_millis (test_config.ConfigTest)
+Traceback (most recent call last):
+  File "test_config.py", line 8, in test_seconds_are_converted_to_millis
+    self.assertEqual(timeout_millis({"timeout_seconds": 3}), 3000)
+AssertionError: 3 != 3000
+
+FAILED (failures=1)

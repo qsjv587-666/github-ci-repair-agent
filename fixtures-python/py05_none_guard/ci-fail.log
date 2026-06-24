@@ -1,0 +1,9 @@
+ERROR: test_none_name_is_empty (test_formatter.FormatterTest)
+Traceback (most recent call last):
+  File "test_formatter.py", line 8, in test_none_name_is_empty
+    self.assertEqual(display_name(None), "")
+  File "src/formatter.py", line 2, in display_name
+    return name.strip().title()
+AttributeError: 'NoneType' object has no attribute 'strip'
+
+FAILED (errors=1)

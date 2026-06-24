@@ -1,0 +1,7 @@
+FAIL: test_only_active_users_returned (test_users.UsersTest)
+Traceback (most recent call last):
+  File "test_users.py", line 9, in test_only_active_users_returned
+    self.assertEqual(active_users(users), [{"id": 1, "active": True}])
+AssertionError: Lists differ
+
+FAILED (failures=1)

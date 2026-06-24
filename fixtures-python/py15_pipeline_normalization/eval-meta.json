@@ -1,0 +1,6 @@
+{
+  "category": "python_multifile_pipeline",
+  "difficulty": "level2",
+  "expectedRagIds": ["playbook_python_assertion_source_contract"],
+  "expectedChangedFiles": ["src/pipeline.py"]
+}

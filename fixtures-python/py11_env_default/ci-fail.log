@@ -1,0 +1,9 @@
+ERROR: test_default_mode_is_dev (test_settings.SettingsTest)
+Traceback (most recent call last):
+  File "test_settings.py", line 8, in test_default_mode_is_dev
+    self.assertEqual(app_mode(), "dev")
+  File "src/settings.py", line 5, in app_mode
+    return os.environ["APP_MODE"]
+KeyError: 'APP_MODE'
+
+FAILED (errors=1)

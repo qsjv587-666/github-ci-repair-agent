@@ -60,6 +60,7 @@
 | lint unused variable | #7 | #8 | source PR CI success |
 | gated auto-merge counter demo | #9 | #11 | repair PR auto-merged, source PR CI success |
 | local watcher counter demo | #12 | #13 | watcher detected failed CI, created repair PR, commented on source PR |
+| Python profile contract KeyError | #14 | #15 | repair PR merged into source branch, source PR CI success |
 
 这说明当前项目不是只在本地 fixture 上跑通，而是已经完成真实 GitHub 仓库里的多类“失败 PR -> 修复 PR -> 合并修复 -> 原 PR CI 变绿”闭环。
 
@@ -69,6 +70,13 @@
 - Watcher 自动创建的修复 PR：`https://github.com/qsjv587-666/ci-repair-agent-demo/pull/13`
 - Watcher 自动写回的源 PR 评论：`https://github.com/qsjv587-666/ci-repair-agent-demo/pull/12#issuecomment-4777357720`
 - 本地 watcher artifact：`artifacts/watch-live-test/watch_20260623084205_c85f2035/watch-summary.json`
+
+Python profile contract demo 的关键记录：
+
+- 源失败 PR：`https://github.com/qsjv587-666/ci-repair-agent-demo/pull/14`
+- Agent 自动创建的修复 PR：`https://github.com/qsjv587-666/ci-repair-agent-demo/pull/15`
+- 修复后成功 CI run：`https://github.com/qsjv587-666/ci-repair-agent-demo/actions/runs/28100212440`
+- 本地修复 artifact：`artifacts/run-python-pr14-fixed/run_20260624125745_e5b857f0/report.md`
 
 ## 3. 代码大结构
 
@@ -587,7 +595,8 @@ Dashboard 在 `cifix/dashboard.py`，它会扫描 artifacts 下的 run、eval、
 
 - run 数量。
 - 成功 run 数。
-- eval 报告。
+- 最新 eval 成功率、case 数、平均耗时。
+- RAG 评测指标：Hit@1、Hit@3、MRR、Coverage。
 - 最近 run 的失败类型、项目、源 PR、修复 PR。
 - Patch Tournament 的候选数量、通过数量、最佳候选和风险分数。
 - Top RAG evidence 的来源、分数和策略摘要。
@@ -600,7 +609,9 @@ Dashboard 在 `cifix/dashboard.py`，它会扫描 artifacts 下的 run、eval、
 
 代码在 `cifix/eval.py`。
 
-本地 fixture 覆盖 5 类典型失败。这里的 fixture 不是“错误类型”本身，而是一个故意带有 CI 失败的最小样例项目，用来稳定复现、评测和回归：
+本地评测分两层：
+
+第一层是 `fixtures/`，作为混合语言回归集，覆盖 5 类典型失败。这里的 fixture 不是“错误类型”本身，而是一个故意带有 CI 失败的最小样例项目，用来稳定复现、评测和回归：
 
 - `react-button-broken`
 - `counter-increment-broken`
@@ -608,10 +619,21 @@ Dashboard 在 `cifix/dashboard.py`，它会扫描 artifacts 下的 run、eval、
 - `lint-unused-var-broken`
 - `python-unittest-broken`
 
+第二层是 `fixtures-python/`，作为 Python-only benchmark，当前包含 15 个 unittest 场景，覆盖断言失败、业务规则错误、字段契约不一致、import refactor、None guard、缺失字段、过滤逻辑、序列化契约、配置单位、日期格式、环境变量默认值、聚合计算、权限逻辑、分页 offset 和多文件 pipeline normalization。
+
 基础 eval：
 
 ```bash
 python3 -m cifix.cli eval --cases fixtures --out artifacts/eval
+```
+
+Python benchmark eval：
+
+```bash
+python3 -m cifix.cli eval \
+  --cases fixtures-python \
+  --out artifacts/eval-python15 \
+  --memory-path artifacts/memory/verified-repairs.json
 ```
 
 Ablation eval：
@@ -629,7 +651,14 @@ python3 -m cifix.cli eval \
 - `no_memory`：关闭历史记忆，观察 RAG 的贡献。
 - `single_candidate`：只保留一个候选 patch，观察 tournament 的贡献。
 
-当前本地 eval 已验证 5/5 修复成功，覆盖 Node / JavaScript 和 Python unittest 基础场景。对简历来说，这比“我做了一个 agent demo”更有说服力，因为它有可重复的评测样例和对照实验。
+RAG 效果评测也写入 `report.md` 和 `summary.json`：
+
+- `Hit@1`：预期修复依据排在第一名的比例。
+- `Hit@3`：预期修复依据出现在 Top 3 的比例。
+- `MRR`：第一个预期修复依据的平均倒数排名，越接近 1 越好。
+- `Coverage`：至少召回一个预期修复依据的比例。
+
+当前本地混合语言 eval 已验证 5/5 修复成功；Python benchmark 已验证 15/15 修复成功，并输出 RAG Hit@1 / Hit@3 / MRR / Coverage 指标。对简历来说，这比“我做了一个 agent demo”更有说服力，因为它有可重复的评测样例、对照实验和明确的 RAG 评估口径。
 
 ## 16. 权限模式
 
@@ -843,7 +872,8 @@ GitHub failed PR
 
 如果要更具体：
 
-- 本地 fixture 覆盖 JavaScript 断言失败、lint 失败、Python unittest 断言失败等场景。
+- 本地混合语言 fixture 覆盖 JavaScript 断言失败、lint 失败、Python unittest 断言失败等场景。
+- Python benchmark 扩展到 15 个 unittest 场景，并能输出 RAG Hit@1、Hit@3、MRR、Coverage。
 - eval 可以对比完整系统、去掉记忆、只生成单候选三种模式。
 - 真实 GitHub demo 覆盖手动触发、watcher 自动触发、repair PR 创建、源 PR 评论和 gated auto-merge。
 - 每次 run 都有 trace、report、patch diff、RAG evidence 和 GitHub write-back artifact。
@@ -860,7 +890,7 @@ GitHub failed PR
 
 可以主动说：
 
-> 当前版本已经覆盖 Node / JavaScript 和 Python unittest 基础场景，复杂多语言项目还需要继续扩展 repo mapper、测试命令推断和 patch 生成策略。当前触发方式是本地 watcher 轮询，不是 GitHub App webhook。Docker sandbox 已支持 setup、reproduce 和 patch verification 命令，并能对 Node 与 Python-only 项目做基础镜像选择。更多 benchmark case、RAG 效果指标和更丰富的 dashboard 是下一阶段优化方向。
+> 当前版本已经覆盖 Node / JavaScript 和 Python unittest 基础场景，并把 Python benchmark 扩展到 15 个可重复评测 case。复杂多语言项目还需要继续扩展 repo mapper、测试命令推断和 patch 生成策略。当前触发方式是本地 watcher 轮询，不是 GitHub App webhook。Docker sandbox 已支持 setup、reproduce 和 patch verification 命令，并能对 Node 与 Python-only 项目做基础镜像选择。下一阶段更适合继续增加真实开源项目级别的 case、提高模型候选生成能力，并扩大 RAG 评测集。
 
 这样回答会显得比较成熟：既说明项目价值，也知道边界。
 
@@ -868,7 +898,7 @@ GitHub failed PR
 
 为了面试时讲得可信，需要主动说明当前边界：
 
-- 目前已验证 Node / JavaScript demo 项目和 Python unittest demo 项目；更复杂的 Python 依赖、pytest 插件、monorepo 还需要继续扩展。
+- 目前已验证 Node / JavaScript demo 项目、Python unittest demo 项目，以及 15 个 Python benchmark case；更复杂的 Python 依赖、pytest 插件、monorepo 还需要继续扩展。
 - patch 生成仍有规则 fallback，真实复杂项目需要更多语言和框架适配。
 - 当前是 CLI 工作台，可以通过本地 watcher 轮询 GitHub 触发修复，但还不是 GitHub webhook / GitHub App 服务。
 - Docker sandbox 需要本机安装 Docker；当前能为 Node 和 Python-only 项目选择基础镜像，复杂多语言项目仍建议显式指定镜像和命令。
@@ -900,8 +930,8 @@ GitHub failed PR
    - Patch Tournament。
 
 5. **落地验证**
-   - 本地 fixture 5/5。
-   - 真实 GitHub demo：#1/#3/#5/#7 四类失败，agent 创建 #2/#4/#6/#8 修复 PR，合并修复 PR 后源 PR CI success；#12 watcher 自动发现失败 CI，创建 #13 repair PR，并评论回源 PR。
+   - 本地混合语言 fixture 5/5，Python benchmark 15/15。
+   - 真实 GitHub demo：#1/#3/#5/#7 四类失败，agent 创建 #2/#4/#6/#8 修复 PR，合并修复 PR 后源 PR CI success；#12 watcher 自动发现失败 CI，创建 #13 repair PR，并评论回源 PR；#14 Python 字段契约失败由 agent 创建 #15 修复 PR，合并后源 PR CI success。
 
 6. **工程边界**
    - 命令 allowlist。
@@ -925,6 +955,15 @@ python3 -m cifix.cli run \
 
 ```bash
 python3 -m cifix.cli eval --cases fixtures --out artifacts/eval
+```
+
+Python benchmark：
+
+```bash
+python3 -m cifix.cli eval \
+  --cases fixtures-python \
+  --out artifacts/eval-python15 \
+  --memory-path artifacts/memory/verified-repairs.json
 ```
 
 真实 GitHub 只读：

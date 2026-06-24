@@ -1,0 +1,9 @@
+ERROR: test_missing_total_defaults_to_zero (test_cart.CartTest)
+Traceback (most recent call last):
+  File "test_cart.py", line 8, in test_missing_total_defaults_to_zero
+    self.assertEqual(line_total({"sku": "A-1"}), 0)
+  File "src/cart.py", line 2, in line_total
+    return item["total"]
+KeyError: 'total'
+
+FAILED (errors=1)

@@ -1,0 +1,6 @@
+{
+  "category": "python_business_rule",
+  "difficulty": "level1",
+  "expectedRagIds": ["playbook_python_assertion_source_contract"],
+  "expectedChangedFiles": ["src/billing.py"]
+}

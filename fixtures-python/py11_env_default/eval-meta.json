@@ -1,0 +1,6 @@
+{
+  "category": "python_env_default",
+  "difficulty": "level2",
+  "expectedRagIds": ["playbook_python_missing_data_guard"],
+  "expectedChangedFiles": ["src/settings.py"]
+}

@@ -1,0 +1,6 @@
+{
+  "category": "python_none_guard",
+  "difficulty": "level2",
+  "expectedRagIds": ["playbook_python_missing_data_guard"],
+  "expectedChangedFiles": ["src/formatter.py"]
+}

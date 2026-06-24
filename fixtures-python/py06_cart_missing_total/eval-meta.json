@@ -1,0 +1,6 @@
+{
+  "category": "python_missing_data",
+  "difficulty": "level2",
+  "expectedRagIds": ["playbook_python_missing_data_guard"],
+  "expectedChangedFiles": ["src/cart.py"]
+}

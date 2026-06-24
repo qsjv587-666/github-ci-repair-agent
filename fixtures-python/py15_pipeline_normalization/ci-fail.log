@@ -1,0 +1,7 @@
+FAIL: test_pipeline_normalizes_service_data (test_pipeline.PipelineTest)
+Traceback (most recent call last):
+  File "test_pipeline.py", line 8, in test_pipeline_normalizes_service_data
+    self.assertEqual(build_user_label(7), "7:Ada Lovelace")
+AssertionError: '7: ada lovelace ' != '7:Ada Lovelace'
+
+FAILED (failures=1)

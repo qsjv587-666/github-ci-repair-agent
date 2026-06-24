@@ -9,7 +9,8 @@ from pathlib import Path
 from unittest.mock import patch
 
 from cifix.dashboard import generate_dashboard
-from cifix.eval import run_eval
+from cifix.eval import discover_cases, run_eval
+from cifix.agents.failure_triage_agent import create_failure_fingerprint
 from cifix.agents.github_writer_agent import auto_merge_gate_error, build_repair_branch, run_github_writer_agent
 from cifix.github import load_github_context, parse_github_url
 from cifix.inspect import inspect_github
@@ -57,6 +58,13 @@ class CifixSmokeTest(unittest.TestCase):
             self.assertIn("python-unittest-broken", report)
             self.assertIn("react-button-broken", report)
             self.assertIn("todo-filter-broken", report)
+            self.assertIn("RAG Evidence Metrics", report)
+
+    def test_python_benchmark_discovers_15_cases_with_rag_expectations(self) -> None:
+        cases = discover_cases(Path("fixtures-python"))
+        self.assertEqual(len(cases), 15)
+        self.assertTrue(all(case["command"] == "python3 -m unittest" for case in cases))
+        self.assertTrue(all(case.get("expectedRagIds") for case in cases))
 
     def test_eval_compare_baselines_runs_multiple_variants(self) -> None:
         with tempfile.TemporaryDirectory(prefix="cifix-baseline-") as out:
@@ -142,6 +150,17 @@ class CifixSmokeTest(unittest.TestCase):
             (root / "tests" / "test_sample.py").write_text("import unittest\n")
             self.assertEqual(infer_setup_command(root, enabled=True), None)
             self.assertEqual(infer_command(root), "python3 -m unittest")
+
+    def test_python_command_overrides_mixed_repo_package_manager(self) -> None:
+        fingerprint = create_failure_fingerprint(
+            raw_log="",
+            command="python3 -m unittest test_report.py",
+            repo_map={"languages": ["javascript", "python"], "packageManager": "npm"},
+            github_context=None,
+            reproduction={"stdout": "", "stderr": "KeyError: 'name'"},
+        )
+        self.assertEqual(fingerprint["language"], "python")
+        self.assertEqual(fingerprint["packageManager"], "python")
 
     def test_github_pr_url_resolves_failed_run_job_and_logs(self) -> None:
         def fake_json(path: str, token: str | None):
@@ -344,6 +363,7 @@ class CifixSmokeTest(unittest.TestCase):
             self.assertIn("CIFix Agent 看板", html)
             self.assertIn("react-button-broken", html)
             self.assertIn("最新 eval 成功率", html)
+            self.assertIn("RAG Hit@3", html)
             self.assertIn("Top RAG Evidence", html)
 
     def test_status_writes_pr_ci_snapshot_artifacts(self) -> None:

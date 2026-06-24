@@ -101,19 +101,24 @@ def discover_status_artifacts(root: Path) -> list[dict[str, Any]]:
     return sorted(statuses, key=lambda item: item["id"], reverse=True)
 
 
-def read_json(path: Path) -> dict[str, Any] | None:
+def read_json(path: Path) -> Any | None:
     if not path.exists():
         return None
     try:
         loaded = json.loads(path.read_text())
     except json.JSONDecodeError:
         return None
-    return loaded if isinstance(loaded, dict) else None
+    return loaded
 
 
 def render_dashboard(root: Path, runs: list[dict[str, Any]], evals: list[dict[str, Any]], inspections: list[dict[str, Any]], statuses: list[dict[str, Any]]) -> str:
     success_runs = len([run for run in runs if run["status"] == "success"])
     latest_eval = evals[0] if evals else {}
+    latest_rag = get_primary_rag_summary(latest_eval)
+    latest_success_rate = format_rate(latest_eval.get("successRate"))
+    latest_hit_at_3 = format_rate(latest_rag.get("hitAt3") if latest_rag else None)
+    latest_mrr = format_rate(latest_rag.get("mrr") if latest_rag else None)
+    latest_coverage = format_rate(latest_rag.get("coverage") if latest_rag else None)
     return f"""<!doctype html>
 <html lang="zh-CN">
 <head>
@@ -121,18 +126,25 @@ def render_dashboard(root: Path, runs: list[dict[str, Any]], evals: list[dict[st
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>CIFix Agent 看板</title>
   <style>
-    body {{ margin: 0; font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif; color: #172026; background: #f7f8fa; }}
-    header {{ padding: 28px 36px 18px; background: #ffffff; border-bottom: 1px solid #dde3ea; }}
+    :root {{ color-scheme: light; --ink: #172026; --muted: #5d6b78; --line: #dde3ea; --panel: #ffffff; --soft: #f1f5f9; --accent: #1769aa; --good: #236b2e; --warn: #8a5200; --bad: #9b1c1c; }}
+    * {{ box-sizing: border-box; }}
+    body {{ margin: 0; font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif; color: var(--ink); background: #f7f8fa; }}
+    header {{ padding: 30px 36px 20px; background: linear-gradient(180deg, #ffffff 0%, #f8fafc 100%); border-bottom: 1px solid var(--line); }}
     main {{ padding: 24px 36px 40px; }}
-    h1 {{ margin: 0 0 6px; font-size: 28px; }}
-    h2 {{ margin: 28px 0 12px; font-size: 18px; }}
+    h1 {{ margin: 0 0 6px; font-size: 28px; letter-spacing: 0; }}
+    h2 {{ margin: 28px 0 12px; font-size: 18px; letter-spacing: 0; }}
+    .panel h2 {{ margin-top: 0; }}
     .muted {{ color: #5d6b78; font-size: 13px; }}
-    .grid {{ display: grid; grid-template-columns: repeat(auto-fit, minmax(180px, 1fr)); gap: 12px; }}
-    .metric {{ background: #ffffff; border: 1px solid #dde3ea; border-radius: 8px; padding: 14px; }}
-    .metric strong {{ display: block; font-size: 24px; margin-bottom: 4px; }}
-    table {{ width: 100%; border-collapse: collapse; background: #ffffff; border: 1px solid #dde3ea; border-radius: 8px; overflow: hidden; }}
+    .grid {{ display: grid; grid-template-columns: repeat(auto-fit, minmax(190px, 1fr)); gap: 12px; }}
+    .metric {{ min-height: 98px; background: var(--panel); border: 1px solid var(--line); border-radius: 8px; padding: 14px; box-shadow: 0 1px 2px rgba(15, 23, 42, 0.04); }}
+    .metric strong {{ display: block; font-size: 25px; margin-bottom: 5px; letter-spacing: 0; }}
+    .metric span {{ color: #44515e; font-size: 13px; }}
+    .metric .hint {{ display: block; margin-top: 7px; color: var(--muted); font-size: 12px; line-height: 1.35; }}
+    .panel {{ margin-top: 18px; background: var(--panel); border: 1px solid var(--line); border-radius: 8px; padding: 16px; }}
+    .table-wrap {{ width: 100%; overflow-x: auto; border: 1px solid var(--line); border-radius: 8px; background: var(--panel); }}
+    table {{ width: 100%; min-width: 980px; border-collapse: collapse; background: var(--panel); }}
     th, td {{ text-align: left; padding: 10px 12px; border-bottom: 1px solid #e8edf2; font-size: 13px; vertical-align: top; }}
-    th {{ background: #f0f3f6; color: #44515e; font-weight: 600; }}
+    th {{ background: var(--soft); color: #44515e; font-weight: 600; white-space: nowrap; }}
     tr:last-child td {{ border-bottom: 0; }}
     a {{ color: #1769aa; text-decoration: none; }}
     a:hover {{ text-decoration: underline; }}
@@ -149,12 +161,16 @@ def render_dashboard(root: Path, runs: list[dict[str, Any]], evals: list[dict[st
   </header>
   <main>
     <section class="grid">
-      <div class="metric"><strong>{len(runs)}</strong><span>修复 run 总数</span></div>
-      <div class="metric"><strong>{success_runs}</strong><span>成功 run</span></div>
-      <div class="metric"><strong>{len(evals)}</strong><span>eval 报告</span></div>
-      <div class="metric"><strong>{len(inspections)}</strong><span>GitHub inspect 记录</span></div>
-      <div class="metric"><strong>{len(statuses)}</strong><span>GitHub status 快照</span></div>
-      <div class="metric"><strong>{escape(str(latest_eval.get("successRate", "n/a")))}</strong><span>最新 eval 成功率</span></div>
+      <div class="metric"><strong>{len(runs)}</strong><span>修复 run 总数</span><span class="hint">真实 PR 和本地 fixture 的修复记录</span></div>
+      <div class="metric"><strong>{success_runs}</strong><span>成功 run</span><span class="hint">已选 patch 通过本地验证</span></div>
+      <div class="metric"><strong>{latest_success_rate}</strong><span>最新 eval 成功率</span><span class="hint">{escape(str(latest_eval.get("caseCount", "n/a")))} cases / {escape(str(latest_eval.get("total", "n/a")))} runs</span></div>
+      <div class="metric"><strong>{latest_hit_at_3}</strong><span>RAG Hit@3</span><span class="hint">Top 3 evidence 命中预期修复依据</span></div>
+      <div class="metric"><strong>{latest_mrr}</strong><span>RAG MRR</span><span class="hint">预期 evidence 排名越靠前越好</span></div>
+      <div class="metric"><strong>{latest_coverage}</strong><span>RAG Coverage</span><span class="hint">至少召回一个预期 evidence 的比例</span></div>
+    </section>
+    <section class="panel">
+      <h2>最新 Eval 概览</h2>
+      {render_latest_eval_summary(root, latest_eval)}
     </section>
     <section>
       <h2>最近修复 Runs</h2>
@@ -194,7 +210,7 @@ def render_runs_table(root: Path, runs: list[dict[str, Any]]) -> str:
 </tr>"""
         for run in runs[:50]
     )
-    return f"<table><thead><tr><th>Run</th><th>状态</th><th>项目</th><th>失败类型</th><th>Patch Tournament</th><th>Top RAG Evidence</th><th>GitHub 写回</th><th>Artifacts</th></tr></thead><tbody>{rows}</tbody></table>"
+    return f"<div class=\"table-wrap\"><table><thead><tr><th>Run</th><th>状态</th><th>项目</th><th>失败类型</th><th>Patch Tournament</th><th>Top RAG Evidence</th><th>GitHub 写回</th><th>Artifacts</th></tr></thead><tbody>{rows}</tbody></table></div>"
 
 
 def render_status_table(root: Path, statuses: list[dict[str, Any]]) -> str:
@@ -210,7 +226,7 @@ def render_status_table(root: Path, statuses: list[dict[str, Any]]) -> str:
 </tr>"""
         for item in statuses[:30]
     )
-    return f"<table><thead><tr><th>快照</th><th>Pull Request</th><th>CI</th><th>分支</th><th>最新 Run</th></tr></thead><tbody>{rows}</tbody></table>"
+    return f"<div class=\"table-wrap\"><table><thead><tr><th>快照</th><th>Pull Request</th><th>CI</th><th>分支</th><th>最新 Run</th></tr></thead><tbody>{rows}</tbody></table></div>"
 
 
 def render_evals_table(root: Path, evals: list[dict[str, Any]]) -> str:
@@ -222,11 +238,37 @@ def render_evals_table(root: Path, evals: list[dict[str, Any]]) -> str:
   <td>{escape(str(item.get("total", 0)))}</td>
   <td>{escape(str(item.get("success", 0)))}</td>
   <td>{escape(str(item.get("successRate", "n/a")))}</td>
+  <td>{render_rag_metric(item, "hitAt1")}</td>
+  <td>{render_rag_metric(item, "hitAt3")}</td>
+  <td>{render_rag_metric(item, "mrr")}</td>
   <td>{escape(str(item.get("avgDurationMs", "n/a")))} ms</td>
 </tr>"""
         for item in evals[:20]
     )
-    return f"<table><thead><tr><th>Eval</th><th>Cases</th><th>成功数</th><th>成功率</th><th>平均耗时</th></tr></thead><tbody>{rows}</tbody></table>"
+    return f"<div class=\"table-wrap\"><table><thead><tr><th>Eval</th><th>Cases</th><th>成功数</th><th>成功率</th><th>RAG Hit@1</th><th>RAG Hit@3</th><th>RAG MRR</th><th>平均耗时</th></tr></thead><tbody>{rows}</tbody></table></div>"
+
+
+def render_latest_eval_summary(root: Path, eval_summary: dict[str, Any]) -> str:
+    if not eval_summary:
+        return "<p class=\"muted\">暂无 eval 报告。运行 <span class=\"mono\">python3 -m cifix.cli eval</span> 后会显示修复成功率和 RAG 指标。</p>"
+    rag = get_primary_rag_summary(eval_summary)
+    variants = eval_summary.get("variantSummary") or []
+    variant_text = ", ".join(f"{item.get('variant')}: {item.get('success')}/{item.get('total')}" for item in variants) or "暂无"
+    rag_text = "暂无 RAG 期望 evidence"
+    if rag:
+        rag_text = (
+            f"Hit@1={format_rate(rag.get('hitAt1'))}, "
+            f"Hit@3={format_rate(rag.get('hitAt3'))}, "
+            f"MRR={format_rate(rag.get('mrr'))}, "
+            f"Coverage={format_rate(rag.get('coverage'))}"
+        )
+    return f"""<div class="grid">
+  <div class="metric"><strong>{escape(str(eval_summary.get("caseCount", "n/a")))}</strong><span>Case 数</span><span class="hint">{escape(str(eval_summary.get("casesRoot", "")))}</span></div>
+  <div class="metric"><strong>{escape(str(eval_summary.get("success", 0)))}/{escape(str(eval_summary.get("total", 0)))}</strong><span>通过 run</span><span class="hint">平均耗时 {escape(str(eval_summary.get("avgDurationMs", "n/a")))} ms</span></div>
+  <div class="metric"><strong>{format_rate(eval_summary.get("successRate"))}</strong><span>整体成功率</span><span class="hint">{escape(variant_text)}</span></div>
+  <div class="metric"><strong>{escape(str(rag.get("cases", 0) if rag else 0))}</strong><span>RAG 评测 cases</span><span class="hint">{escape(rag_text)}</span></div>
+</div>
+<p class="muted">报告：{link(root, eval_summary["path"] / "report.md", eval_summary.get("evalId", eval_summary["path"].name))}</p>"""
 
 
 def render_inspections_table(root: Path, inspections: list[dict[str, Any]]) -> str:
@@ -243,7 +285,7 @@ def render_inspections_table(root: Path, inspections: list[dict[str, Any]]) -> s
 </tr>"""
         for item in inspections[:30]
     )
-    return f"<table><thead><tr><th>Inspect</th><th>Repo</th><th>PR</th><th>Run</th><th>Job</th><th>日志字符数</th></tr></thead><tbody>{rows}</tbody></table>"
+    return f"<div class=\"table-wrap\"><table><thead><tr><th>Inspect</th><th>Repo</th><th>PR</th><th>Run</th><th>Job</th><th>日志字符数</th></tr></thead><tbody>{rows}</tbody></table></div>"
 
 
 def link(root: Path, target: Path, label: str) -> str:
@@ -277,6 +319,32 @@ def render_latest_run(run: dict[str, Any] | None) -> str:
     if not run:
         return '<span class="muted">暂无</span>'
     return f"{external_link(run.get('htmlUrl'), str(run.get('id') or 'run'))}<br><span class=\"muted\">{escape(str(run.get('status')))} / {escape(str(run.get('conclusion')))}</span>"
+
+
+def render_rag_metric(eval_summary: dict[str, Any], key: str) -> str:
+    full = get_primary_rag_summary(eval_summary)
+    if not full:
+        return '<span class="muted">暂无</span>'
+    return format_rate(full.get(key))
+
+
+def get_primary_rag_summary(eval_summary: dict[str, Any]) -> dict[str, Any] | None:
+    rag_summary = eval_summary.get("ragSummary") or []
+    if not isinstance(rag_summary, list):
+        return None
+    full = next((item for item in rag_summary if isinstance(item, dict) and item.get("variant") == "full"), None)
+    if full:
+        return full
+    return next((item for item in rag_summary if isinstance(item, dict)), None)
+
+
+def format_rate(value: Any) -> str:
+    if value is None or value == "n/a":
+        return "n/a"
+    try:
+        return f"{float(value):.3f}".rstrip("0").rstrip(".")
+    except (TypeError, ValueError):
+        return escape(str(value))
 
 
 def status_class(status: str | None) -> str:

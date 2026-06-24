@@ -1,0 +1,6 @@
+{
+  "category": "python_import_refactor",
+  "difficulty": "level2",
+  "expectedRagIds": ["playbook_python_import_refactor"],
+  "expectedChangedFiles": ["src/consumer.py"]
+}

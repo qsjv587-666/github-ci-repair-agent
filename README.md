@@ -30,6 +30,15 @@ Run local eval:
 python3 -m cifix.cli eval --cases fixtures --out artifacts/eval
 ```
 
+Run the Python benchmark eval:
+
+```bash
+python3 -m cifix.cli eval \
+  --cases fixtures-python \
+  --out artifacts/eval-python15 \
+  --memory-path artifacts/memory/verified-repairs.json
+```
+
 Run eval with ablation baselines:
 
 ```bash
@@ -119,8 +128,10 @@ Current scope:
 - Optional GitHub write-back via `--create-pr`: commit the verified patch, push a repair branch, and create a PR when `GITHUB_TOKEN` has write permissions.
 - Optional local watcher via `watch`: poll open GitHub PRs, detect failed CI, trigger the repair workflow once per failed head SHA / workflow run, and optionally comment back on the source PR.
 - Eval runner over multiple CI failure fixtures.
+- Python-only benchmark suite under `fixtures-python`, currently covering 15 unittest-based CI failure cases.
+- RAG evidence metrics in eval reports: Hit@1, Hit@3, MRR, and Coverage.
 - Baseline comparison for `full`, `no_memory`, and `single_candidate` eval variants.
-- Static dashboard for run/eval/inspect artifact browsing.
+- Static Chinese dashboard for run/eval/inspect/status artifact browsing, including latest eval and RAG metrics.
 
 The most reliable zero-credential smoke path is still the local fixture. For real GitHub projects, start with read-only mode. You can paste a PR URL and let CIFix resolve the related failed workflow run/job:
 
@@ -268,10 +279,37 @@ Current fixture set:
 - `lint-unused-var-broken`
 - `python-unittest-broken`
 
+Python benchmark fixture set:
+
+- `fixtures-python/py01_calculator_add`
+- `fixtures-python/py02_discount_rate`
+- `fixtures-python/py03_profile_contract`
+- `fixtures-python/py04_import_refactor`
+- `fixtures-python/py05_none_guard`
+- `fixtures-python/py06_cart_missing_total`
+- `fixtures-python/py07_filter_active_users`
+- `fixtures-python/py08_serializer_contract`
+- `fixtures-python/py09_timeout_unit`
+- `fixtures-python/py10_date_format`
+- `fixtures-python/py11_env_default`
+- `fixtures-python/py12_order_total`
+- `fixtures-python/py13_owner_permission`
+- `fixtures-python/py14_pagination_offset`
+- `fixtures-python/py15_pipeline_normalization`
+
 Latest verified local eval:
 
 ```text
 cases: 5
 success: 5
 success_rate: 1
+```
+
+Latest verified Python benchmark:
+
+```text
+cases: 15
+success: 15
+success_rate: 1
+RAG metrics: Hit@1 0.067, Hit@3 0.667, MRR 0.38, Coverage 0.867
 ```

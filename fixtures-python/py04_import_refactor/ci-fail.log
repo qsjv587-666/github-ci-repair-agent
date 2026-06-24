@@ -1,0 +1,8 @@
+ERROR: test_consumer (unittest.loader._FailedTest)
+ImportError: Failed to import test module: test_consumer
+Traceback (most recent call last):
+  File "src/consumer.py", line 1, in <module>
+    from src.date_utils import parse_date
+ModuleNotFoundError: No module named 'src.date_utils'
+
+FAILED (errors=1)

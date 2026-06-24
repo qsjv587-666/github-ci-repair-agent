@@ -1,0 +1,7 @@
+FAIL: test_first_page_starts_at_zero (test_pagination.PaginationTest)
+Traceback (most recent call last):
+  File "test_pagination.py", line 8, in test_first_page_starts_at_zero
+    self.assertEqual(page_items([1, 2, 3, 4], page=1, size=2), [1, 2])
+AssertionError: Lists differ: [3, 4] != [1, 2]
+
+FAILED (failures=1)
