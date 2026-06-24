@@ -683,7 +683,171 @@ python3 -m cifix.cli eval \
 
 > Codex / Claude 是强大的通用 coding agent；这个项目是围绕 CI 失败修复这个垂直场景，把 GitHub 上下文、失败指纹、历史修复记忆、多候选验证和 PR 写回组合成一个可评测、可复盘、可展示的软件维护系统。
 
-## 18. 当前限制
+## 18. 面试高频问答
+
+这一节不是代码说明，而是面向没看过项目的面试官，解释你为什么这样设计。
+
+### 18.1 为什么要用多 Agent，而不是一个单 Agent
+
+可以这样回答：
+
+> CI 自动修复不是单纯“让模型改代码”，而是一条工程流程：要先读取 GitHub 上下文，理解失败日志，复现失败，检索历史修复经验，生成候选 patch，再逐个验证和排序，最后写回 GitHub。单 Agent 也能尝试完成这些事，但过程容易变成黑盒，面试官很难判断它到底有没有复现、有没有测试、有没有乱改测试。
+>
+> 所以我把它拆成多个职责明确的 Agent，每个 Agent 只负责一个环节，并且都有结构化输入输出。上游 Agent 产出的 failure fingerprint、RAG evidence、candidate patches、verification results 会成为下游 Agent 的决策依据。这样整个修复流程可以被 trace 回放，也可以做 ablation，对比去掉记忆、去掉多候选验证后的效果。
+
+如果面试官继续追问“这是不是只是普通工作流”，可以补一句：
+
+> 是的，它本质上是一个 agentic workflow，而不是几个 Agent 随机聊天。我认为工程项目里更重要的是可控和可验证，所以采用 Supervisor 编排的状态流：每一步既可以调用工具，也可以调用模型，但最终都必须把结果落到结构化状态和测试证据上。
+
+### 18.2 多 Agent 之间怎么协作
+
+可以这样回答：
+
+> 多 Agent 之间不是通过自然语言闲聊协作，而是通过结构化状态传递。比如诊断 Agent 产出 failure fingerprint，记忆 Agent 用 fingerprint 去检索历史修复案例，Patch Agent 基于日志、fingerprint 和 RAG evidence 生成多个候选 patch，Test Agent 逐个应用 patch 并运行测试，Review Agent 根据测试结果、改动范围、风险标签和历史依据选择最终修复。
+>
+> 所有步骤都会写入 trace，所以我可以解释一次修复为什么选择这个 patch，而不是另一个 patch。
+
+可以用这个链路举例：
+
+```text
+GitHub failed PR
+-> 失败日志和改动文件
+-> Failure Fingerprint
+-> Hybrid RAG 召回历史修复依据
+-> 多个候选 patch
+-> 每个 patch 独立测试
+-> 风险排序和最小可行修复
+-> 创建 repair PR / 评论源 PR
+```
+
+### 18.3 Agent 的四大组成部分怎么具体实现
+
+如果面试官问 Agent 的基本组成，可以按“感知、规划、行动、记忆”来讲。
+
+#### 感知模块
+
+它负责把外部世界变成 Agent 能处理的上下文。
+
+在这个项目里，感知模块包括：
+
+- 读取 GitHub PR 信息：源分支、目标分支、PR 标题、changed files。
+- 读取 GitHub Actions 信息：workflow run、failed job、job log。
+- 把 PR 代码 clone 到本地隔离 workspace。
+- 本地运行测试命令，确认失败是否能复现。
+
+可以这样说：
+
+> 我没有只依赖用户描述，而是直接从 GitHub API 读取 PR、CI run、job log 和 changed files，再在本地 workspace 复现失败。这样 Agent 看到的是实际 CI 证据，而不是人工转述。
+
+#### 规划模块
+
+它负责决定修复流程怎么走。
+
+在这个项目里，规划不是让模型自由发挥，而是固定为可控状态机：
+
+```text
+读取上下文 -> 复现失败 -> 生成失败指纹 -> 检索记忆 -> 生成候选 patch -> 测试验证 -> 风险排序 -> 写回 GitHub
+```
+
+可以这样说：
+
+> 我没有把规划完全交给 LLM，而是把 CI 修复拆成稳定的工程状态机。LLM 主要参与候选 patch 生成和解释，关键门禁，比如是否测试通过、是否改测试、是否能写回 GitHub，都由确定性规则和真实测试结果控制。
+
+#### 行动模块
+
+它负责真正对代码和 GitHub 做操作。
+
+在这个项目里，行动包括：
+
+- 在本地 workspace 运行测试命令。
+- 应用候选 patch。
+- 恢复 baseline，确保每个 patch 独立验证。
+- 推送 repair branch。
+- 创建 repair PR。
+- 可选评论源 PR。
+- 可选在低风险门禁下合并 repair PR。
+
+可以这样说：
+
+> 行动模块不是任意执行 shell，而是有命令 allowlist、timeout 和写回开关。默认只读，只有显式打开 create-pr 才会推分支和创建 PR；自动 merge 也只针对低风险 repair PR，并且不会直接合入 main。
+
+#### 记忆模块
+
+它负责让系统复用历史修复经验。
+
+在这个项目里，记忆不是聊天历史，而是 verified repair memory：
+
+- 每次修复成功后，记录失败类型、错误码、失败文件、变更文件、测试命令、修复策略、patch 摘要、验证结果。
+- 下次遇到相似失败时，用 Failure Fingerprint 生成查询。
+- 先用 BM25 做关键词精确召回，再用 ChromaDB + Qwen/DashScope embedding 做向量语义召回。
+- 最后根据 BM25 分数、向量分数和历史置信度做混合排序。
+
+可以这样说：
+
+> 这个项目的记忆不是“用户偏好记忆”，而是工程修复记忆。只有测试通过的修复才会写入 memory。下次遇到类似 CI 失败时，RAG 会召回历史上验证过的修复案例，作为 patch 生成和风险排序的证据。
+
+### 18.4 为什么需要 RAG
+
+可以这样回答：
+
+> CI 失败有很强的重复性，比如相同测试框架、相同错误码、相同文件模式会反复出现。如果每次都让模型从零分析，就浪费上下文，也缺少可追溯依据。RAG 的作用是把过去验证过的修复经验沉淀下来，让系统不仅知道“这次日志是什么”，还知道“过去类似失败是怎么被修好的”。
+>
+> 我用了 BM25 和向量检索的混合方案：BM25 擅长匹配错误码、文件名、测试命令这类精确关键词；向量检索擅长召回描述不同但语义相似的失败。两者结合，比单纯关键词或单纯向量更适合 CI 失败场景。
+
+### 18.5 为什么要做多候选 patch 验证
+
+可以这样回答：
+
+> 单次生成 patch 最大的问题是过拟合。模型可能为了让测试通过去改测试，也可能做一个看似合理但范围过大的修复。所以我设计了多候选 patch 验证流程：同一个失败生成多个候选修复，每个候选都在干净 workspace 上独立应用和测试，然后根据测试是否通过、diff 大小、风险标签、是否命中历史修复经验来排序。
+>
+> 这样最终选择的是“最小可行修复”，而不是第一个看起来能改的 patch。
+
+### 18.6 项目最大的难点是什么
+
+可以讲三个难点。
+
+第一，GitHub 上下文和本地复现不一定一致。
+
+> GitHub Actions 运行在云端，本地运行在我的机器上，两边环境可能不同。所以我做了 workflow/job log 读取、依赖安装命令推断、测试命令推断和 workspace 隔离，让本地复现尽量接近 CI，同时把 GitHub 原始日志也作为诊断输入。
+
+第二，模型生成 patch 不可靠。
+
+> 模型可能生成无效 diff、改测试、做过大改动，或者解释正确但代码不通过。所以我没有直接信任模型输出，而是把 patch 变成候选项，必须经过 apply、test、risk scoring 和 review。只有验证通过的 selected patch 才能进入写回环节。
+
+第三，自动写回 GitHub 有安全风险。
+
+> 如果 Agent 直接推 main 或自动 merge 业务 PR，会很危险。所以系统默认只读；写回必须显式打开；repair PR 的 base 是源失败分支，不是 main；自动 merge 也只合并 repair PR 到源失败分支，并且要求本地验证通过、风险标签安全、diff 范围小。最终源 PR 是否合入 main 仍交给人或仓库保护规则。
+
+### 18.7 如何证明这不是玩具 demo
+
+可以这样回答：
+
+> 我没有只做一个本地脚本，而是做了真实 GitHub 接入、失败 PR 监听、CI 日志读取、本地复现、RAG 记忆、多候选验证、PR 写回、源 PR 评论、dashboard 和 eval。项目已经在个人 GitHub demo 仓库跑通过多类真实 PR 闭环，包括失败 PR 自动检测、自动创建 repair PR、评论源 PR，以及低风险 repair PR 自动合并后让源 PR CI 重新变绿。
+
+如果要更具体：
+
+- 本地 fixture 覆盖断言失败、lint 失败等场景。
+- eval 可以对比完整系统、去掉记忆、只生成单候选三种模式。
+- 真实 GitHub demo 覆盖手动触发、watcher 自动触发、repair PR 创建、源 PR 评论和 gated auto-merge。
+- 每次 run 都有 trace、report、patch diff、RAG evidence 和 GitHub write-back artifact。
+
+### 18.8 这个项目和 Codex / Claude 最大区别是什么
+
+可以这样回答：
+
+> Codex / Claude 是通用 Coding Agent，能力很强，但它们通常是围绕一次自然语言任务工作。我的项目关注的是一个垂直工程流程：GitHub CI failure repair。区别不在于“模型比它们强”，而在于我把真实 GitHub CI 上下文、Failure Fingerprint、Hybrid RAG、Patch Tournament、写回门禁、eval 和 dashboard 组合成了一套可审计的软件维护系统。
+>
+> 所以它解决的是“CI 失败后如何可控、可复盘、可重复地自动修复”，而不是单纯“让模型帮我改一段代码”。
+
+### 18.9 当前不足和下一步优化
+
+可以主动说：
+
+> 当前版本主要验证 Node / JavaScript 场景，复杂多语言项目还需要扩展 repo mapper、测试命令推断和 patch 生成策略。当前触发方式是本地 watcher 轮询，不是 GitHub App webhook。Docker 级 sandbox、更多 benchmark case、RAG 效果指标和更丰富的 dashboard 是下一阶段优化方向。
+
+这样回答会显得比较成熟：既说明项目价值，也知道边界。
+
+## 19. 当前限制
 
 为了面试时讲得可信，需要主动说明当前边界：
 
@@ -697,7 +861,7 @@ python3 -m cifix.cli eval \
 
 这些限制不影响 MVP 价值，反而说明你知道项目边界，没有夸大。
 
-## 19. 面试讲解顺序
+## 20. 面试讲解顺序
 
 建议按这个顺序讲，最容易让人听懂：
 
@@ -727,7 +891,7 @@ python3 -m cifix.cli eval \
    - 显式 `--create-pr`。
    - 自动 merge 默认关闭，开启后也必须通过 CI、风险标签、diff 范围等门禁。
 
-## 20. 快速运行命令
+## 21. 快速运行命令
 
 本地 smoke：
 
@@ -816,7 +980,7 @@ python3 -m cifix.cli run \
 python3 -m cifix.cli dashboard --artifacts artifacts
 ```
 
-## 21. 简历表述对应关系
+## 22. 简历表述对应关系
 
 可以把简历里的四条和代码对应起来：
 
