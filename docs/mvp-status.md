@@ -10,6 +10,7 @@ It supports:
 - Read-only GitHub PR / Actions URL inspection.
 - GitHub PR / run / job context loading for the full repair workflow.
 - Safe setup and verification commands through allowlists.
+- Optional Docker sandbox for setup, reproduction, and patch verification commands.
 - Failure fingerprint generation.
 - Hybrid repair RAG retrieval with BM25, vector cosine search, and hybrid reranking.
 - Verified repair memory written only after tests pass, then indexed for future RAG retrieval.
@@ -29,6 +30,7 @@ It does not support in MVP:
 - GitHub webhook / GitHub App event ingestion.
 - Running arbitrary shell commands.
 - Claiming support for all languages/build systems.
+- Automatic Docker image selection for every language ecosystem.
 
 ## Demo Commands
 
@@ -129,6 +131,18 @@ python3 -m cifix.cli run \
   --use-model
 ```
 
+Docker sandbox repair:
+
+```bash
+python3 -m cifix.cli run \
+  --repo fixtures/react-button-broken \
+  --command "npm test" \
+  --log fixtures/react-button-broken/ci-fail.log \
+  --out artifacts \
+  --sandbox docker \
+  --docker-image node:20
+```
+
 Local watcher dry-run:
 
 ```bash
@@ -158,7 +172,7 @@ Latest local verification:
 ```text
 python3 -m compileall -q cifix tests
 python3 -m unittest discover -s tests
-21 tests OK
+24 tests OK
 
 python3 -m cifix.cli eval --cases fixtures --out artifacts/eval
 cases: 4
@@ -196,5 +210,5 @@ Suggested metrics to report from the current MVP:
 - Add more fixtures until at least 20 cases.
 - Add a stable fork-based GitHub demo repo with intentionally failing PRs.
 - Add optional GitHub draft PR creation behind explicit approval.
-- Add Docker-based sandboxing for stronger isolation.
+- Add automatic Docker image selection for more language ecosystems.
 - Add richer TypeScript type-error repair cases.

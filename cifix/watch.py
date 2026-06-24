@@ -152,6 +152,9 @@ def build_repair_flags(flags: dict[str, Any], status: dict[str, Any]) -> dict[st
         "auto-merge-max-diff-lines",
         "ssh-key",
         "no-wait-source-ci",
+        "sandbox",
+        "docker-image",
+        "docker-network",
     ]
     repair_flags = {key: flags[key] for key in passthrough_keys if key in flags}
     repair_flags["url"] = status["pullUrl"]

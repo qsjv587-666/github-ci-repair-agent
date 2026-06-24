@@ -74,6 +74,40 @@ class CifixSmokeTest(unittest.TestCase):
         self.assertEqual(result["exitCode"], 126)
         self.assertIn("safety policy", result["message"])
 
+    def test_run_command_can_execute_inside_docker_sandbox(self) -> None:
+        captured = {}
+
+        def fake_subprocess_run(args, **kwargs):
+            captured["args"] = args
+            captured["kwargs"] = kwargs
+            return subprocess.CompletedProcess(args, 0, stdout="ok", stderr="")
+
+        with tempfile.TemporaryDirectory(prefix="cifix-docker-cmd-") as tmp:
+            with patch("cifix.tools.command.subprocess.run", side_effect=fake_subprocess_run):
+                result = run_command("npm test", tmp, sandbox={"mode": "docker", "image": "node:20", "network": "none"})
+
+        self.assertTrue(result["passed"])
+        self.assertEqual(result["sandbox"]["mode"], "docker")
+        self.assertEqual(result["sandbox"]["image"], "node:20")
+        self.assertEqual(captured["args"][:3], ["docker", "run", "--rm"])
+        self.assertIn("--network", captured["args"])
+        self.assertIn("node:20", captured["args"])
+        self.assertEqual(captured["args"][-2:], ["npm", "test"])
+        self.assertIsNone(captured["kwargs"]["cwd"])
+
+    def test_run_command_timeout_outputs_are_json_safe(self) -> None:
+        def fake_subprocess_run(*args, **kwargs):
+            raise subprocess.TimeoutExpired(cmd=args[0], timeout=1, output=b"partial out", stderr=b"partial err")
+
+        with tempfile.TemporaryDirectory(prefix="cifix-timeout-cmd-") as tmp:
+            with patch("cifix.tools.command.subprocess.run", side_effect=fake_subprocess_run):
+                result = run_command("npm test", tmp, sandbox={"mode": "docker", "image": "node:20"})
+
+        self.assertEqual(result["exitCode"], 124)
+        self.assertEqual(result["stdout"], "partial out")
+        self.assertEqual(result["stderr"], "partial err")
+        json.dumps(result)
+
     def test_setup_command_inference_uses_lockfile(self) -> None:
         with tempfile.TemporaryDirectory(prefix="cifix-setup-") as tmp:
             root = Path(tmp)
@@ -417,6 +451,30 @@ class CifixSmokeTest(unittest.TestCase):
         self.assertEqual(captured[0]["vector-db"], "chroma")
         self.assertEqual(captured[0]["embedding-provider"], "dashscope")
         self.assertEqual(captured[0]["embedding-model"], "text-embedding-v4")
+
+    def test_eval_passes_sandbox_flags_to_runs(self) -> None:
+        captured = []
+
+        def fake_run_cifix(flags: dict):
+            captured.append(flags)
+            out = Path(flags["out"])
+            out.mkdir(parents=True, exist_ok=True)
+            report = out / "report.md"
+            patch_path = out / "patch.diff"
+            trace = out / "trace.json"
+            report.write_text("# report\n")
+            patch_path.write_text("")
+            trace.write_text("{}")
+            return {"runId": "run_fake", "status": "success", "paths": {"report": str(report), "patch": str(patch_path), "trace": str(trace)}}
+
+        with tempfile.TemporaryDirectory(prefix="cifix-eval-sandbox-") as out:
+            with patch("cifix.eval.run_cifix", side_effect=fake_run_cifix):
+                run_eval({"cases": "fixtures", "out": out, "sandbox": "docker", "docker-image": "node:20", "docker-network": "none"})
+
+        self.assertTrue(captured)
+        self.assertEqual(captured[0]["sandbox"], "docker")
+        self.assertEqual(captured[0]["docker-image"], "node:20")
+        self.assertEqual(captured[0]["docker-network"], "none")
 
     def test_watch_once_triggers_failed_pr_and_records_state(self) -> None:
         fake_statuses = [

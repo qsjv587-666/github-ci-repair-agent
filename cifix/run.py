@@ -19,6 +19,7 @@ from .agents.github_writer_agent import run_github_writer_agent
 from .github import load_github_context
 from .core.trace import step
 from .rag import embedding_config_from_flags, vector_db_from_flags
+from .tools.command import ensure_docker_image, sandbox_config_from_env
 from .tools.workspace import infer_command, infer_setup_command, map_repo, prepare_workspace, read_log, repo_looks_like_github_slug
 
 
@@ -31,8 +32,11 @@ def run_cifix(flags: dict[str, Any]) -> dict[str, Any]:
     memory_path = Path(flags.get("memory-path") or "artifacts/memory/verified-repairs.json").resolve()
     vector_db = vector_db_from_flags(flags)
     embedding_config = embedding_config_from_flags(flags)
+    sandbox = sandbox_config_from_env({"mode": flags.get("sandbox"), "image": flags.get("docker-image"), "network": flags.get("docker-network")})
     trace: list[dict[str, Any]] = []
     run_dir.mkdir(parents=True, exist_ok=True)
+    if sandbox["mode"] == "docker":
+        trace.append(step("Sandbox", {"mode": "docker", "image": sandbox["image"]}, ensure_docker_image(sandbox["image"])))
 
     github_context = load_github_context(
         pr_url=flags.get("url") or flags.get("pr-url"),
@@ -45,11 +49,11 @@ def run_cifix(flags: dict[str, Any]) -> dict[str, Any]:
     prepare_workspace(flags, github_context, workspace_dir, trace)
     command = flags.get("command") or infer_command(workspace_dir)
     setup_command = flags.get("setup-command") or infer_setup_command(workspace_dir, enabled=bool(github_context))
-    setup_result = run_setup_agent(workspace_dir=workspace_dir, setup_command=setup_command, trace=trace)
+    setup_result = run_setup_agent(workspace_dir=workspace_dir, setup_command=setup_command, trace=trace, sandbox=sandbox)
     raw_log = read_log(flags.get("log")) if flags.get("log") else (github_context or {}).get("rawLog", "")
     repo_map = map_repo(workspace_dir)
 
-    reproduction = run_reproducer_agent(workspace_dir=workspace_dir, command=command, trace=trace)
+    reproduction = run_reproducer_agent(workspace_dir=workspace_dir, command=command, trace=trace, sandbox=sandbox)
     fingerprint = run_failure_triage_agent(raw_log=raw_log, command=command, repo_map=repo_map, github_context=github_context, reproduction=reproduction, trace=trace)
     if flags.get("no-memory"):
         playbook_hits = []
@@ -60,7 +64,7 @@ def run_cifix(flags: dict[str, Any]) -> dict[str, Any]:
     candidates = patch_result["candidates"][:1] if flags.get("single-candidate") else patch_result["candidates"]
     if flags.get("single-candidate"):
         trace.append(step("BaselineMode", {"mode": "single-candidate"}, {"candidateCount": len(candidates)}))
-    test_results = run_test_agent(workspace_dir=workspace_dir, candidates=candidates, command=command, playbook_hits=playbook_hits, run_dir=run_dir, trace=trace)
+    test_results = run_test_agent(workspace_dir=workspace_dir, candidates=candidates, command=command, playbook_hits=playbook_hits, run_dir=run_dir, trace=trace, sandbox=sandbox)
     tournament = run_review_agent(workspace_dir=workspace_dir, test_results=test_results, trace=trace)
     selected = tournament["selected"]
     memory_write = (

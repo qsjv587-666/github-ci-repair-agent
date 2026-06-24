@@ -13,6 +13,7 @@ from .model import model_config_from_env
 from .rag import embedding_config_from_flags, query_repair_rag, vector_db_from_flags
 from .run import run_cifix
 from .status import inspect_status
+from .tools.command import sandbox_config_from_env
 from .watch import run_watch
 
 
@@ -148,6 +149,9 @@ Usage:
   cifix run --url https://github.com/owner/repo/pull/123 --create-pr --token-env GITHUB_TOKEN [--ssh-key ~/.ssh/github_ci_repair_agent] [--draft-pr] [--auto-merge-repair-pr] [--require-repair-ci]
   cifix watch --repo owner/repo --interval-seconds 300 --create-pr --comment-source-pr --token-env GITHUB_TOKEN [--ssh-key ~/.ssh/github_ci_repair_agent]
 
+Sandbox:
+  Add --sandbox docker [--docker-image node:20] to run setup, reproduce, and patch verification commands inside Docker.
+
 Model mode:
   POE_API_KEY=... POE_MODEL=Claude-Opus-4.6 python -m cifix.cli run --repo <path> --command "npm test" --log <ci-log> --use-model
 """)
@@ -157,6 +161,7 @@ def print_doctor() -> None:
     config = model_config_from_env({"use-model": True})
     embedding_config = embedding_config_from_flags({})
     vector_db = vector_db_from_flags({})
+    sandbox = sandbox_config_from_env({})
     print("CIFix Agent doctor")
     print(f"POE_API_KEY: {'set' if config.get('apiKey') else 'missing'}")
     print(f"POE_BASE_URL: {config['baseUrl']}")
@@ -166,6 +171,10 @@ def print_doctor() -> None:
     print(f"EMBEDDING_PROVIDER: {embedding_config['provider']}")
     print(f"EMBEDDING_MODEL: {embedding_config['model']}")
     print(f"EMBEDDING_DIMENSIONS: {embedding_config['dimensions']}")
+    print(f"SANDBOX: {sandbox['mode']}")
+    if sandbox["mode"] == "docker":
+        print(f"DOCKER_IMAGE: {sandbox['image']}")
+        print(f"DOCKER_NETWORK: {sandbox['network']}")
     print(f"DASHSCOPE_API_KEY: {'set' if os.getenv('DASHSCOPE_API_KEY') else 'missing'}")
     print(f"ZHIPU_API_KEY: {'set' if os.getenv('ZHIPU_API_KEY') or os.getenv('ZAI_API_KEY') else 'missing'}")
     print(f"GITHUB_TOKEN: {'set' if os.getenv('GITHUB_TOKEN') else 'missing'}")

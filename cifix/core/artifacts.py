@@ -16,9 +16,9 @@ def summarize_command(result: dict[str, Any]) -> dict[str, Any]:
         "stdoutPreview": preview(result.get("stdout")),
         "stderrPreview": preview(result.get("stderr")),
         "message": result.get("message"),
+        "sandbox": result.get("sandbox"),
     }
 
 
 def json_text(value: Any) -> str:
     return json.dumps(value, ensure_ascii=False, indent=2) + "\n"
-

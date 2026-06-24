@@ -9,7 +9,7 @@ from ..tools.command import DEFAULT_ALLOWED_PREFIXES, run_command
 from ..tools.patch import apply_candidate, git_diff, restore_baseline
 
 
-def run_test_agent(*, workspace_dir: Path, candidates: list[dict[str, Any]], command: str, playbook_hits: list[dict[str, Any]], run_dir: Path, trace: list[dict]) -> list[dict[str, Any]]:
+def run_test_agent(*, workspace_dir: Path, candidates: list[dict[str, Any]], command: str, playbook_hits: list[dict[str, Any]], run_dir: Path, trace: list[dict], sandbox: dict[str, Any] | None = None) -> list[dict[str, Any]]:
     candidate_dir = run_dir / "patch-candidates"
     candidate_dir.mkdir(parents=True, exist_ok=True)
     results = []
@@ -20,7 +20,7 @@ def run_test_agent(*, workspace_dir: Path, candidates: list[dict[str, Any]], com
         try:
             apply_candidate(workspace_dir, candidate)
             diff = git_diff(workspace_dir)
-            verification = run_command(command, workspace_dir, 20, DEFAULT_ALLOWED_PREFIXES)
+            verification = run_command(command, workspace_dir, 20, DEFAULT_ALLOWED_PREFIXES, sandbox=sandbox)
         except Exception as error:
             apply_error = str(error)
             verification = {"command": command, "passed": False, "stdout": "", "stderr": "", "exitCode": 1, "message": apply_error}

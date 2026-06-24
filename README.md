@@ -105,7 +105,7 @@ python3 -m cifix.cli rag \
 
 Current scope:
 
-- Local sandbox execution for a demo repo fixture.
+- Local workspace execution for demo repo fixtures, with optional Docker sandboxing for setup, reproduction, and patch verification commands.
 - GitHub read-only context loading for PR metadata, changed files, workflow jobs, and job logs when a token is provided.
 - Optional Poe model mode for Claude Opus via OpenAI-compatible `/v1/chat/completions`.
 - Failure Fingerprint generation.
@@ -145,6 +145,31 @@ python3 -m cifix.cli run \
   --url https://github.com/owner/repo/pull/123 \
   --setup-command "npm ci" \
   --token-env GITHUB_TOKEN
+```
+
+To run setup, reproduction, and candidate verification inside Docker instead of directly on the host, add `--sandbox docker`. The default image is `node:20`; use `--docker-image` to override it.
+
+```bash
+python3 -m cifix.cli run \
+  --url https://github.com/owner/repo/pull/123 \
+  --command "npm test" \
+  --sandbox docker \
+  --docker-image node:20 \
+  --token-env GITHUB_TOKEN
+```
+
+The watcher passes the same sandbox options into every triggered repair run:
+
+```bash
+python3 -m cifix.cli watch \
+  --repo owner/repo \
+  --interval-seconds 300 \
+  --sandbox docker \
+  --docker-image node:20 \
+  --create-pr \
+  --comment-source-pr \
+  --token-env GITHUB_TOKEN \
+  --ssh-key ~/.ssh/github_ci_repair_agent
 ```
 
 You can also paste a specific GitHub Actions job URL when you already know which job failed:

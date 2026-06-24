@@ -185,6 +185,14 @@ python3 -m cifix.cli watch \
 
 它不是让 GitHub 直接访问你的电脑，而是本地 Agent 每隔一段时间主动查询目标仓库 open PR 的最新 CI 状态。发现 `failure` 后，系统用 `PR number + head SHA + workflow run id` 作为去重 key，只对新的失败触发一次修复流程，并把处理记录写入 `artifacts/watch-state/`。如果同时传 `--comment-source-pr`，修复结束后还会把诊断摘要和 repair PR 链接写回源失败 PR。
 
+如果希望把测试执行放进容器里，可以加：
+
+```bash
+--sandbox docker --docker-image node:20
+```
+
+这样 setup、失败复现和候选 patch 验证都会在 Docker 容器里执行，而不是直接在宿主机执行。workspace 仍然是本地 artifact 目录，但会以 volume 形式挂载到容器的 `/workspace`。
+
 ### 5.2 输出
 
 每次运行会生成一个目录：
@@ -268,6 +276,14 @@ git clone PR head repo
 ```
 
 这块是项目落地价值的一部分：它不是让模型随便跑 shell，而是把可执行命令限制在测试、lint、typecheck 和依赖安装范围内。
+
+当前也支持可选 Docker sandbox：
+
+```bash
+--sandbox docker --docker-image node:20
+```
+
+开启后，setup、失败复现和候选 patch 验证命令会通过 Docker 执行。这样可以把测试运行环境和宿主机隔离开，同时保留本地 artifact workspace 作为可查看的修复现场。
 
 ## 8. Failure Fingerprint 是什么
 
@@ -843,7 +859,7 @@ GitHub failed PR
 
 可以主动说：
 
-> 当前版本主要验证 Node / JavaScript 场景，复杂多语言项目还需要扩展 repo mapper、测试命令推断和 patch 生成策略。当前触发方式是本地 watcher 轮询，不是 GitHub App webhook。Docker 级 sandbox、更多 benchmark case、RAG 效果指标和更丰富的 dashboard 是下一阶段优化方向。
+> 当前版本主要验证 Node / JavaScript 场景，复杂多语言项目还需要扩展 repo mapper、测试命令推断和 patch 生成策略。当前触发方式是本地 watcher 轮询，不是 GitHub App webhook。Docker sandbox 已支持 setup、reproduce 和 patch verification 命令，但还没有做到按不同语言自动选择镜像。更多 benchmark case、RAG 效果指标和更丰富的 dashboard 是下一阶段优化方向。
 
 这样回答会显得比较成熟：既说明项目价值，也知道边界。
 
@@ -854,6 +870,7 @@ GitHub failed PR
 - 目前主要验证 Node / JavaScript demo 项目。
 - patch 生成仍有规则 fallback，真实复杂项目需要更多语言和框架适配。
 - 当前是 CLI 工作台，可以通过本地 watcher 轮询 GitHub 触发修复，但还不是 GitHub webhook / GitHub App 服务。
+- Docker sandbox 需要本机安装 Docker；当前默认镜像面向 Node / JavaScript 项目，其他语言需要显式指定镜像和命令。
 - 默认不会自动 merge，merge 仍由人完成。
 - DashScope embedding 如果账号未开通对应模型权限，需要用 `hash` provider 或换可用 embedding。
 - GitHub 写回需要用户配置 token 和 SSH key。
@@ -951,6 +968,8 @@ python3 -m cifix.cli run \
   --embedding-model text-embedding-v4 \
   --embedding-dimensions 1024 \
   --use-model \
+  --sandbox docker \
+  --docker-image node:20 \
   --create-pr \
   --token-env GITHUB_TOKEN \
   --ssh-key ~/.ssh/github_ci_repair_agent
@@ -968,6 +987,8 @@ python3 -m cifix.cli run \
   --embedding-model text-embedding-v4 \
   --embedding-dimensions 1024 \
   --use-model \
+  --sandbox docker \
+  --docker-image node:20 \
   --create-pr \
   --auto-merge-repair-pr \
   --token-env GITHUB_TOKEN \

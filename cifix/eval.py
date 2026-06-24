@@ -36,6 +36,9 @@ def run_eval(flags: dict[str, Any]) -> dict[str, Any]:
                     "embedding-model": flags.get("embedding-model"),
                     "embedding-dimensions": flags.get("embedding-dimensions"),
                     "embedding-base-url": flags.get("embedding-base-url"),
+                    "sandbox": flags.get("sandbox"),
+                    "docker-image": flags.get("docker-image"),
+                    "docker-network": flags.get("docker-network"),
                     **variant["flags"],
                 }
             )
