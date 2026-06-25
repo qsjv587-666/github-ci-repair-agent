@@ -12,6 +12,7 @@ from cifix.dashboard import generate_dashboard
 from cifix.eval import discover_cases, grade_hit_relevance, relevance_profile_for_case, run_eval
 from cifix.agents.failure_triage_agent import create_failure_fingerprint
 from cifix.agents.memory_writer_agent import run_memory_writer_agent
+from cifix.agents.patch_agent import generate_rule_patch_candidates
 from cifix.agents.github_writer_agent import auto_merge_gate_error, build_repair_branch, run_github_writer_agent
 from cifix.github import load_github_context, parse_github_url
 from cifix.inspect import inspect_github
@@ -255,6 +256,33 @@ class CifixSmokeTest(unittest.TestCase):
         )
         self.assertEqual(mypy["failureType"], "typecheck_error")
         self.assertEqual(mypy["errorCode"], "mypy:return-value")
+
+    def test_python_ruff_patch_does_not_remove_future_imports(self) -> None:
+        with tempfile.TemporaryDirectory(prefix="cifix-ruff-future-") as tmp:
+            root = Path(tmp)
+            source = root / "src" / "requests"
+            source.mkdir(parents=True)
+            (source / "api.py").write_text(
+                "from __future__ import annotations\n\n"
+                "import math\n\n"
+                "from typing import TYPE_CHECKING\n\n"
+                "if TYPE_CHECKING:\n"
+                "    pass\n"
+            )
+            candidates = generate_rule_patch_candidates(
+                root,
+                [{"id": "playbook_python_ruff_unused_import"}],
+                {
+                    "language": "python",
+                    "failureType": "lint_error",
+                    "errorCode": "F401",
+                    "failedFiles": ["src/requests/api.py"],
+                },
+            )
+
+        edit = candidates[0]["edits"][0]
+        self.assertEqual(edit["from"], "import math\n")
+        self.assertNotIn("__future__", edit["from"])
 
     def test_github_pr_url_resolves_failed_run_job_and_logs(self) -> None:
         def fake_json(path: str, token: str | None):

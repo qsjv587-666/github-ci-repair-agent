@@ -694,6 +694,8 @@ RAG eval 分成两种模式：
 
 项目级 Python benchmark 已验证 6/6 修复成功，覆盖 pytest / ruff / mypy 三类常见 Python CI；对应 RAG 指标为 cold-start Recall@5 1.0、nDCG@5 0.991，warm-start Recall@5 1.0、nDCG@5 0.933。
 
+真实开源仓库性能 smoke 目前也跑过一例：使用 `psf/requests` 的 depth-1 clone，本地工作树约 8.1M、157 个文件、37 个 Python 文件；向 `src/requests/api.py` 注入 `ruff F401` unused import 失败后，系统完成复现、RAG 召回、候选 patch 生成、验证和报告输出，端到端 wall time 约 12.84s。这个实验验证的是“真实项目布局下的本地修复链路”，不是完整仓库全量 CI 压测。
+
 ## 16. 权限模式
 
 项目实际上有两种权限模式。
@@ -935,7 +937,7 @@ GitHub failed PR
 
 为了面试时讲得可信，需要主动说明当前边界：
 
-- 目前已验证 Node / JavaScript demo 项目、Python unittest demo 项目、15 个 Python fixture benchmark，以及 3 个项目级 Python benchmark case；更复杂的 Python 依赖、pytest 插件、monorepo 还需要继续扩展。
+- 目前已验证 Node / JavaScript demo 项目、Python unittest demo 项目、15 个 Python fixture benchmark、3 个项目级 Python benchmark case，以及 1 个真实开源 Python 仓库 `psf/requests` 的本地性能 smoke；更复杂的 Python 依赖、pytest 插件、monorepo 和全量 CI 成本还需要继续扩展。
 - patch 生成仍有规则 fallback，真实复杂项目需要更多语言和框架适配。
 - 当前是 CLI 工作台，可以通过本地 watcher 轮询 GitHub 触发修复，但还不是 GitHub webhook / GitHub App 服务。
 - Docker sandbox 需要本机安装 Docker；当前能为 Node 和 Python-only 项目选择基础镜像，复杂多语言项目仍建议显式指定镜像和命令。
@@ -967,7 +969,7 @@ GitHub failed PR
    - Patch Tournament。
 
 5. **落地验证**
-   - 本地混合语言 fixture 5/5，Python benchmark 15/15，项目级 Python benchmark 6/6。
+   - 本地混合语言 fixture 5/5，Python benchmark 15/15，项目级 Python benchmark 6/6，真实开源 Python 仓库性能 smoke 1/1。
    - 真实 GitHub demo：#1/#3/#5/#7 四类失败，agent 创建 #2/#4/#6/#8 修复 PR，合并修复 PR 后源 PR CI success；#12 watcher 自动发现失败 CI，创建 #13 repair PR，并评论回源 PR；#14 Python 字段契约失败由 agent 创建 #15 修复 PR，合并后源 PR CI success。
 
 6. **工程边界**

@@ -113,6 +113,8 @@ def generate_python_ruff_candidates(workspace_dir: Path, playbook_hits: list[dic
             continue
         content = path.read_text()
         for line in content.splitlines(keepends=True):
+            if line.strip().startswith("from __future__ import "):
+                continue
             if not line.lstrip().startswith(("import ", "from ")) or "# noqa" in line:
                 continue
             imported_names = imported_names_from_line(line)

@@ -206,7 +206,7 @@ Latest local verification:
 ```text
 python3 -m compileall -q cifix tests
 python3 -m unittest discover -s tests
-35 tests OK
+36 tests OK
 
 python3 -m cifix.cli eval --cases fixtures --out artifacts/eval
 cases: 5
@@ -244,6 +244,14 @@ success_rate: 1.0
 
 python3 -m cifix.cli inspect --url https://github.com/octocat/Hello-World/pull/1 --out artifacts
 inspect: succeeded in read-only mode
+
+Real-world Python repo performance smoke:
+repo: psf/requests, depth-1 clone, 157 files, 37 Python files, 8.1M working tree
+injected failure: ruff F401 unused import in src/requests/api.py
+command: python3 -m ruff check src/requests/api.py --select F401
+status: success
+wall time: 12.84s
+note: this is an end-to-end local repair smoke, not a full-repository CI load test.
 ```
 
 ## Resume Framing
@@ -261,16 +269,17 @@ Suggested metrics to report from the current MVP:
 - 15 / 15 success on Python benchmark eval.
 - 6 / 6 success on project-level Python benchmark eval.
 - 15 / 15 successful runs in baseline comparison.
-- 35 unit/smoke tests.
+- 36 unit/smoke tests.
 - Read-only GitHub inspect verified on a public PR.
 - Real GitHub Python demo: source PR #14 failed on `KeyError: 'name'`; CIFix created repair PR #15; after merging #15 into the source branch, PR #14 CI reran successfully.
+- Real-world Python repo performance smoke on a depth-1 `psf/requests` clone: injected ruff F401 failure repaired successfully in 12.84s wall time.
 - Hybrid RAG trace includes BM25 score, vector score, hybrid score, matched terms, vector backend, embedding provider/model, vector DB path, and index path.
 - Latest Python RAG modes metrics: cold-start Recall@5 1.0 / nDCG@5 0.934; warm-start leave-one-out Recall@5 0.867 / nDCG@5 0.758.
 - Latest project-level Python RAG metrics: cold-start Recall@5 1.0 / nDCG@5 0.991; warm-start Recall@5 1.0 / nDCG@5 0.933.
 
 ## Next Non-MVP Extensions
 
-- Add more real-world Python cases beyond the current 15-case fixture benchmark and 3 project-level benchmark cases.
+- Add larger real-world Python repo experiments beyond the current `psf/requests` smoke, including full pytest jobs and dependency setup costs.
 - Add a stable fork-based GitHub demo repo with intentionally failing PRs.
 - Add optional GitHub draft PR creation behind explicit approval.
 - Add automatic Docker image selection for more language ecosystems.

@@ -348,3 +348,15 @@ success_rate: 1.0
 rag_cold_start: Recall@5 1.0, Useful@3 1.0, nDCG@5 0.991, MRR 1.0
 rag_warm_start: Recall@5 1.0, Useful@3 1.0, nDCG@5 0.933, MRR 1.0
 ```
+
+Latest real-world Python repo performance smoke:
+
+```text
+repo: psf/requests, depth-1 clone
+size: 157 files, 37 Python files, 8.1M working tree
+injected failure: ruff F401 unused import in src/requests/api.py
+command: python3 -m ruff check src/requests/api.py --select F401
+status: success
+wall time: 12.84s
+scope: end-to-end local repair smoke, not full-repository CI load testing
+```
