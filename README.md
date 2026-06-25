@@ -140,7 +140,7 @@ Current scope:
 - Optional local watcher via `watch`: poll open GitHub PRs, detect failed CI, trigger the repair workflow once per failed head SHA / workflow run, and optionally comment back on the source PR.
 - Eval runner over multiple CI failure fixtures.
 - Python-only benchmark suite under `fixtures-python`, currently covering 15 unittest-based CI failure cases.
-- Project-level Python benchmark suite under `benchmarks/python-projects`, covering pytest contract failure, ruff F401 lint failure, and mypy optional return-value failure.
+- Project-level Python benchmark suite under `benchmarks/python-projects`, covering pytest contract failure, ruff F401 lint failure, mypy optional return-value failure, and three multi-file Python repair cases.
 - RAG evidence metrics in eval reports: semantic Recall@5, Useful@3, nDCG@5, MRR, plus legacy fixed-id Hit@1/Hit@3 for reference.
 - Baseline comparison for `full`, `no_memory`, and `single_candidate` eval variants.
 - Static Chinese dashboard for run/eval/inspect/status artifact browsing, including latest eval and RAG metrics.
@@ -341,12 +341,12 @@ Latest project-level Python benchmark:
 
 ```text
 python3 -m cifix.cli eval --cases benchmarks/python-projects --out artifacts/eval-python-projects --memory-path artifacts/memory/verified-repairs.json --rag-eval-modes
-cases: 3
-total_runs: 6
-success: 6
+cases: 6
+total_runs: 12
+success: 12
 success_rate: 1.0
-rag_cold_start: Recall@5 1.0, Useful@3 1.0, nDCG@5 0.991, MRR 1.0
-rag_warm_start: Recall@5 1.0, Useful@3 1.0, nDCG@5 0.933, MRR 1.0
+rag_cold_start: Recall@5 1.0, Useful@3 1.0, nDCG@5 0.99, MRR 1.0
+rag_warm_start: Recall@5 1.0, Useful@3 1.0, nDCG@5 0.914, MRR 1.0
 ```
 
 Latest real-world Python repo performance smoke:

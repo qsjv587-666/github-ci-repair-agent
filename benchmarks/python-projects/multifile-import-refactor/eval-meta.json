@@ -1,0 +1,19 @@
+{
+  "command": "python3 -m pytest",
+  "setupCommand": "python3 -m pip install -r requirements.txt",
+  "category": "python_import_refactor",
+  "difficulty": "project-level-multifile",
+  "expectedRagIds": ["playbook_python_import_refactor"],
+  "expectedChangedFiles": [
+    "src/app/services/orders.py",
+    "src/app/services/reports.py",
+    "src/app/api/dashboard.py"
+  ],
+  "expectedEvidence": {
+    "rootCause": "date parser moved to a new module and multiple call sites still import the old path",
+    "concepts": ["import", "module", "refactor", "date parser", "call sites"],
+    "strategies": ["update all call sites", "new module path"],
+    "failureTypes": ["import_error"],
+    "errorCodes": ["ModuleNotFoundError"]
+  }
+}

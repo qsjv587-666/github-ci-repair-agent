@@ -1,0 +1,19 @@
+{
+  "command": "python3 -m pytest",
+  "setupCommand": "python3 -m pip install -r requirements.txt",
+  "category": "python_contract_mismatch",
+  "difficulty": "project-level-multifile",
+  "expectedRagIds": ["playbook_python_missing_data_guard", "playbook_python_assertion_source_contract"],
+  "expectedChangedFiles": [
+    "src/clinic/summary.py",
+    "src/clinic/serializer.py",
+    "src/clinic/notifications.py"
+  ],
+  "expectedEvidence": {
+    "rootCause": "profile field contract changed from name to full_name across multiple consumers",
+    "concepts": ["profile", "full_name", "field", "contract", "serializer", "notification"],
+    "strategies": ["align all consumers", "use exposed field", "match provider contract"],
+    "failureTypes": ["runtime_error"],
+    "errorCodes": ["KeyError"]
+  }
+}

@@ -48,6 +48,7 @@ def generate_rule_patch_candidates(workspace_dir: Path, playbook_hits: list[dict
     candidates = []
     candidates.extend(generate_lint_unused_var_candidates(workspace_dir, playbook_hits))
     candidates.extend(generate_python_profile_contract_candidates(workspace_dir, playbook_hits, fingerprint or {}))
+    candidates.extend(generate_python_import_refactor_candidates(workspace_dir, playbook_hits, fingerprint or {}))
     candidates.extend(generate_python_ruff_candidates(workspace_dir, playbook_hits, fingerprint or {}))
     candidates.extend(generate_python_mypy_candidates(workspace_dir, playbook_hits, fingerprint or {}))
     rules = [
@@ -147,23 +148,29 @@ def generate_python_mypy_candidates(workspace_dir: Path, playbook_hits: list[dic
     if fingerprint.get("language") != "python" or fingerprint.get("failureType") != "typecheck_error":
         return []
     candidates = []
-    rules = [
+    optional_display_name_rules = [
         ("src/accounts/service.py", "return user.display_name", "return user.display_name or \"Unknown\"", "patch_python_mypy_optional_display_name", "display_name is optional, so the service should return a string fallback."),
         ("src/service.py", "return user.display_name", "return user.display_name or \"Unknown\"", "patch_python_mypy_optional_display_name", "display_name is optional, so the service should return a string fallback."),
+        ("src/accounts/notifications.py", "return user.display_name", "return user.display_name or \"Unknown\"", "patch_python_mypy_optional_display_name", "display_name is optional, so notification subjects should use a typed fallback."),
     ]
-    for file, old, new, candidate_id, hypothesis in rules:
+    edits = []
+    hypotheses = []
+    for file, old, new, _candidate_id, hypothesis in optional_display_name_rules:
         path = workspace_dir / file
         if path.exists() and old in path.read_text():
-            candidates.append(
-                {
-                    "id": candidate_id,
-                    "hypothesis": hypothesis,
-                    "playbookId": playbook_hits[0]["id"] if playbook_hits else None,
-                    "riskTags": ["source-change", "type-fix"],
-                    "source": "rule",
-                    "edits": [{"file": file, "from": old, "to": new}],
-                }
-            )
+            edits.append({"file": file, "from": old, "to": new})
+            hypotheses.append(hypothesis)
+    if edits:
+        candidates.append(
+            {
+                "id": "patch_python_mypy_optional_display_name",
+                "hypothesis": " ".join(dict.fromkeys(hypotheses)),
+                "playbookId": playbook_hits[0]["id"] if playbook_hits else None,
+                "riskTags": ["source-change", "type-fix"],
+                "source": "rule",
+                "edits": edits,
+            }
+        )
     return candidates[:2]
 
 
@@ -175,7 +182,7 @@ def generate_python_profile_contract_candidates(workspace_dir: Path, playbook_hi
     source_root = workspace_dir / "src"
     if not source_root.exists():
         return []
-    candidates = []
+    edits = []
     for path in source_root.rglob("*.py"):
         content = path.read_text()
         quote_style = "single" if "profile['name']" in content else "double" if 'profile["name"]' in content else None
@@ -183,18 +190,48 @@ def generate_python_profile_contract_candidates(workspace_dir: Path, playbook_hi
             continue
         old = "profile['name']" if quote_style == "single" else 'profile["name"]'
         new = "profile['full_name']" if quote_style == "single" else 'profile["full_name"]'
-        edits = [{"file": path.relative_to(workspace_dir).as_posix(), "from": old, "to": new} for _ in range(content.count(old))]
-        candidates.append(
-            {
-                "id": f"patch_python_profile_contract_{path.stem}",
-                "hypothesis": "profile consumers should read the full_name field exposed by the upstream service contract.",
-                "playbookId": playbook_hits[0]["id"] if playbook_hits else None,
-                "riskTags": ["source-change", "contract-fix"],
-                "source": "rule",
-                "edits": edits,
-            }
-        )
-    return candidates[:2]
+        edits.extend({"file": path.relative_to(workspace_dir).as_posix(), "from": old, "to": new} for _ in range(content.count(old)))
+    if not edits:
+        return []
+    return [
+        {
+            "id": "patch_python_profile_contract_all_consumers",
+            "hypothesis": "Profile consumers should read the full_name field exposed by the upstream service contract across all affected modules.",
+            "playbookId": playbook_hits[0]["id"] if playbook_hits else None,
+            "riskTags": ["source-change", "contract-fix"],
+            "source": "rule",
+            "edits": edits,
+        }
+    ]
+
+
+def generate_python_import_refactor_candidates(workspace_dir: Path, playbook_hits: list[dict[str, Any]], fingerprint: dict[str, Any]) -> list[dict[str, Any]]:
+    if fingerprint.get("language") != "python" or fingerprint.get("failureType") != "import_error":
+        return []
+    source_root = workspace_dir / "src"
+    if not source_root.exists():
+        return []
+    replacements = [
+        ("from src.date_utils import parse_date", "from src.time_utils import parse_date"),
+        ("from src.app.utils.date import parse_date", "from src.app.common.date_parser import parse_date"),
+    ]
+    edits = []
+    for path in source_root.rglob("*.py"):
+        content = path.read_text()
+        for old, new in replacements:
+            edits.extend({"file": path.relative_to(workspace_dir).as_posix(), "from": old, "to": new} for _ in range(content.count(old)))
+    if not edits:
+        return []
+    return [
+        {
+            "id": "patch_python_import_refactor_all_call_sites",
+            "hypothesis": "Update all Python call sites to the new module path after a refactor instead of adding compatibility shims.",
+            "playbookId": playbook_hits[0]["id"] if playbook_hits else None,
+            "riskTags": ["source-change", "import-fix"],
+            "source": "rule",
+            "edits": edits,
+        }
+    ]
 
 
 def generate_lint_unused_var_candidates(workspace_dir: Path, playbook_hits: list[dict[str, Any]]) -> list[dict[str, Any]]:

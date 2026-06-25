@@ -626,6 +626,9 @@ Dashboard 在 `cifix/dashboard.py`，它会扫描 artifacts 下的 run、eval、
 - `pytest` 多文件字段契约失败。
 - `ruff check` F401 unused import 失败。
 - `mypy` optional return-value 类型失败。
+- 多文件字段契约传播：provider 字段从 `name` 变成 `full_name`，summary / serializer / notification 三个消费者一起失效。
+- 多文件类型传播：`display_name: str | None` 同时影响 service 和 notification 两个边界。
+- 多文件 import refactor：date parser 移动后，api / service / report 三个调用点仍引用旧路径。
 
 基础 eval：
 
@@ -692,7 +695,7 @@ RAG eval 分成两种模式：
 
 当前本地混合语言 eval 已验证 5/5 修复成功；Python benchmark 已验证 15/15 修复成功。最新 15-case RAG modes benchmark 为 30/30 修复成功，其中 cold-start Recall@5 1.0、nDCG@5 0.934；warm-start leave-one-out Recall@5 0.867、Useful@3 0.867、nDCG@5 0.758。这个结果说明静态 playbook 覆盖较好，但当前历史 memory 规模还小、相似 case 噪声偏高，过滤自记忆后 warm-start 仍有优化空间。
 
-项目级 Python benchmark 已验证 6/6 修复成功，覆盖 pytest / ruff / mypy 三类常见 Python CI；对应 RAG 指标为 cold-start Recall@5 1.0、nDCG@5 0.991，warm-start Recall@5 1.0、nDCG@5 0.933。
+项目级 Python benchmark 已验证 12/12 修复成功，覆盖 pytest / ruff / mypy 三类常见 Python CI，其中 3 个 case 要求一个候选 patch 同时修改多个源文件；对应 RAG 指标为 cold-start Recall@5 1.0、nDCG@5 0.99，warm-start Recall@5 1.0、nDCG@5 0.914。
 
 真实开源仓库性能 smoke 目前也跑过一例：使用 `psf/requests` 的 depth-1 clone，本地工作树约 8.1M、157 个文件、37 个 Python 文件；向 `src/requests/api.py` 注入 `ruff F401` unused import 失败后，系统完成复现、RAG 召回、候选 patch 生成、验证和报告输出，端到端 wall time 约 12.84s。这个实验验证的是“真实项目布局下的本地修复链路”，不是完整仓库全量 CI 压测。
 
@@ -910,7 +913,7 @@ GitHub failed PR
 
 - 本地混合语言 fixture 覆盖 JavaScript 断言失败、lint 失败、Python unittest 断言失败等场景。
 - Python benchmark 扩展到 15 个 unittest 场景，并能输出 semantic Recall@5、Useful@3、nDCG@5、MRR 和 legacy fixed-id Hit 指标。
-- 项目级 Python benchmark 覆盖 pytest、ruff、mypy，不再只停留在 unittest 小样例。
+- 项目级 Python benchmark 覆盖 pytest、ruff、mypy，并加入字段契约传播、类型传播、import refactor 三个多文件修复场景，不再只停留在 unittest 小样例。
 - Memory governance 会跳过 noop / test-change / possible-overfit 这类低质量记忆，并对重复修复做更新而不是无限追加。
 - RAG reranker 会在 BM25 + vector 之后结合 failureType、errorCode、文件重合、strategy 关键词和 memory quality 做二次排序。
 - eval 可以对比完整系统、去掉记忆、只生成单候选三种模式。
@@ -937,7 +940,7 @@ GitHub failed PR
 
 为了面试时讲得可信，需要主动说明当前边界：
 
-- 目前已验证 Node / JavaScript demo 项目、Python unittest demo 项目、15 个 Python fixture benchmark、3 个项目级 Python benchmark case，以及 1 个真实开源 Python 仓库 `psf/requests` 的本地性能 smoke；更复杂的 Python 依赖、pytest 插件、monorepo 和全量 CI 成本还需要继续扩展。
+- 目前已验证 Node / JavaScript demo 项目、Python unittest demo 项目、15 个 Python fixture benchmark、6 个项目级 Python benchmark case，以及 1 个真实开源 Python 仓库 `psf/requests` 的本地性能 smoke；更复杂的 Python 依赖、pytest 插件、monorepo 和全量 CI 成本还需要继续扩展。
 - patch 生成仍有规则 fallback，真实复杂项目需要更多语言和框架适配。
 - 当前是 CLI 工作台，可以通过本地 watcher 轮询 GitHub 触发修复，但还不是 GitHub webhook / GitHub App 服务。
 - Docker sandbox 需要本机安装 Docker；当前能为 Node 和 Python-only 项目选择基础镜像，复杂多语言项目仍建议显式指定镜像和命令。
@@ -969,7 +972,7 @@ GitHub failed PR
    - Patch Tournament。
 
 5. **落地验证**
-   - 本地混合语言 fixture 5/5，Python benchmark 15/15，项目级 Python benchmark 6/6，真实开源 Python 仓库性能 smoke 1/1。
+   - 本地混合语言 fixture 5/5，Python benchmark 15/15，项目级 Python benchmark 12/12，真实开源 Python 仓库性能 smoke 1/1。
    - 真实 GitHub demo：#1/#3/#5/#7 四类失败，agent 创建 #2/#4/#6/#8 修复 PR，合并修复 PR 后源 PR CI success；#12 watcher 自动发现失败 CI，创建 #13 repair PR，并评论回源 PR；#14 Python 字段契约失败由 agent 创建 #15 修复 PR，合并后源 PR CI success。
 
 6. **工程边界**

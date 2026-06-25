@@ -1,0 +1,9 @@
+=================================== FAILURES ===================================
+_____________________ test_multifile_profile_contract ______________________
+tests/test_profile_contract.py:8: in test_multifile_profile_contract
+    payload = build_patient_packet("p-3001")
+src/clinic/summary.py:8: in build_patient_packet
+    "title": f"Follow-up summary for {profile['name']}",
+E   KeyError: 'name'
+=========================== short test summary info ============================
+FAILED tests/test_profile_contract.py::test_multifile_profile_contract - KeyError: 'name'

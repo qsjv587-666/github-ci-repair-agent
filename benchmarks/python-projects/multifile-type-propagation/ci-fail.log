@@ -1,0 +1,3 @@
+src/accounts/notifications.py:7: error: Incompatible return value type (got "str | None", expected "str")  [return-value]
+src/accounts/service.py:7: error: Incompatible return value type (got "str | None", expected "str")  [return-value]
+Found 2 errors in 2 files (checked 5 source files)

@@ -72,10 +72,13 @@ class CifixSmokeTest(unittest.TestCase):
 
     def test_python_project_benchmark_declares_pytest_ruff_and_mypy_commands(self) -> None:
         cases = discover_cases(Path("benchmarks/python-projects"))
-        self.assertEqual(len(cases), 3)
+        self.assertEqual(len(cases), 6)
         commands = {case["command"] for case in cases}
         self.assertEqual(commands, {"python3 -m pytest", "python3 -m ruff check src", "python3 -m mypy src"})
         self.assertTrue(all(case.get("setupCommand") == "python3 -m pip install -r requirements.txt" for case in cases))
+        multifile_cases = [case for case in cases if case.get("difficulty") == "project-level-multifile"]
+        self.assertEqual(len(multifile_cases), 3)
+        self.assertTrue(all(len(case.get("expectedChangedFiles") or []) >= 2 for case in multifile_cases))
 
     def test_rag_relevance_accepts_useful_verified_repair_memory(self) -> None:
         case = {
@@ -283,6 +286,52 @@ class CifixSmokeTest(unittest.TestCase):
         edit = candidates[0]["edits"][0]
         self.assertEqual(edit["from"], "import math\n")
         self.assertNotIn("__future__", edit["from"])
+
+    def test_multifile_profile_contract_patch_updates_all_consumers(self) -> None:
+        candidates = generate_rule_patch_candidates(
+            Path("benchmarks/python-projects/multifile-profile-contract"),
+            [{"id": "playbook_python_missing_data_guard"}],
+            {
+                "language": "python",
+                "failureType": "runtime_error",
+                "errorCode": "KeyError",
+                "failedFiles": ["src/clinic/summary.py"],
+            },
+        )
+        candidate = candidates[0]
+        changed_files = {edit["file"] for edit in candidate["edits"]}
+        self.assertEqual(candidate["id"], "patch_python_profile_contract_all_consumers")
+        self.assertEqual(
+            changed_files,
+            {
+                "src/clinic/summary.py",
+                "src/clinic/serializer.py",
+                "src/clinic/notifications.py",
+            },
+        )
+
+    def test_multifile_import_refactor_patch_updates_all_call_sites(self) -> None:
+        candidates = generate_rule_patch_candidates(
+            Path("benchmarks/python-projects/multifile-import-refactor"),
+            [{"id": "playbook_python_import_refactor"}],
+            {
+                "language": "python",
+                "failureType": "import_error",
+                "errorCode": "ModuleNotFoundError",
+                "failedFiles": ["src/app/api/dashboard.py"],
+            },
+        )
+        candidate = candidates[0]
+        changed_files = {edit["file"] for edit in candidate["edits"]}
+        self.assertEqual(candidate["id"], "patch_python_import_refactor_all_call_sites")
+        self.assertEqual(
+            changed_files,
+            {
+                "src/app/api/dashboard.py",
+                "src/app/services/orders.py",
+                "src/app/services/reports.py",
+            },
+        )
 
     def test_github_pr_url_resolves_failed_run_job_and_logs(self) -> None:
         def fake_json(path: str, token: str | None):

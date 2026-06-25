@@ -1,0 +1,18 @@
+{
+  "command": "python3 -m mypy src",
+  "setupCommand": "python3 -m pip install -r requirements.txt",
+  "category": "python_mypy_optional_return",
+  "difficulty": "project-level-multifile",
+  "expectedRagIds": ["playbook_python_mypy_optional_return"],
+  "expectedChangedFiles": [
+    "src/accounts/service.py",
+    "src/accounts/notifications.py"
+  ],
+  "expectedEvidence": {
+    "rootCause": "optional display_name type propagated across service and notification boundaries",
+    "concepts": ["mypy", "optional", "display_name", "fallback", "return value"],
+    "strategies": ["narrow none", "typed fallback", "boundary"],
+    "failureTypes": ["typecheck_error"],
+    "errorCodes": ["mypy:return-value"]
+  }
+}

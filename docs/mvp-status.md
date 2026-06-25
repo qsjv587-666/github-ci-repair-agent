@@ -206,7 +206,7 @@ Latest local verification:
 ```text
 python3 -m compileall -q cifix tests
 python3 -m unittest discover -s tests
-36 tests OK
+38 tests OK
 
 python3 -m cifix.cli eval --cases fixtures --out artifacts/eval
 cases: 5
@@ -229,12 +229,12 @@ rag_cold_start: Recall@5 1.0, Useful@3 1.0, nDCG@5 0.934, MRR 0.922
 rag_warm_start: Recall@5 0.867, Useful@3 0.867, nDCG@5 0.758, MRR 0.6
 
 python3 -m cifix.cli eval --cases benchmarks/python-projects --out artifacts/eval-python-projects --memory-path artifacts/memory/verified-repairs.json --rag-eval-modes
-cases: 3
-total_runs: 6
-success: 6
+cases: 6
+total_runs: 12
+success: 12
 success_rate: 1.0
-rag_cold_start: Recall@5 1.0, Useful@3 1.0, nDCG@5 0.991, MRR 1.0
-rag_warm_start: Recall@5 1.0, Useful@3 1.0, nDCG@5 0.933, MRR 1.0
+rag_cold_start: Recall@5 1.0, Useful@3 1.0, nDCG@5 0.99, MRR 1.0
+rag_warm_start: Recall@5 1.0, Useful@3 1.0, nDCG@5 0.914, MRR 1.0
 
 python3 -m cifix.cli eval --cases fixtures --out artifacts/eval-baselines --compare-baselines
 cases: 5
@@ -264,18 +264,18 @@ Suggested metrics to report from the current MVP:
 
 - 5 mixed-language CI-failure fixtures, including Node / JavaScript and Python unittest cases.
 - 15 Python-only benchmark fixtures under `fixtures-python`.
-- 3 project-level Python benchmark cases covering pytest, ruff, and mypy.
+- 6 project-level Python benchmark cases covering pytest, ruff, mypy, and 3 multi-file repair scenarios.
 - 5 / 5 success on mixed-language full eval.
 - 15 / 15 success on Python benchmark eval.
-- 6 / 6 success on project-level Python benchmark eval.
+- 12 / 12 success on project-level Python benchmark eval across cold/warm RAG modes.
 - 15 / 15 successful runs in baseline comparison.
-- 36 unit/smoke tests.
+- 38 unit/smoke tests.
 - Read-only GitHub inspect verified on a public PR.
 - Real GitHub Python demo: source PR #14 failed on `KeyError: 'name'`; CIFix created repair PR #15; after merging #15 into the source branch, PR #14 CI reran successfully.
 - Real-world Python repo performance smoke on a depth-1 `psf/requests` clone: injected ruff F401 failure repaired successfully in 12.84s wall time.
 - Hybrid RAG trace includes BM25 score, vector score, hybrid score, matched terms, vector backend, embedding provider/model, vector DB path, and index path.
 - Latest Python RAG modes metrics: cold-start Recall@5 1.0 / nDCG@5 0.934; warm-start leave-one-out Recall@5 0.867 / nDCG@5 0.758.
-- Latest project-level Python RAG metrics: cold-start Recall@5 1.0 / nDCG@5 0.991; warm-start Recall@5 1.0 / nDCG@5 0.933.
+- Latest project-level Python RAG metrics: cold-start Recall@5 1.0 / nDCG@5 0.99; warm-start Recall@5 1.0 / nDCG@5 0.914.
 
 ## Next Non-MVP Extensions
 
