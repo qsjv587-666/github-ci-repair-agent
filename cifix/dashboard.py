@@ -116,9 +116,9 @@ def render_dashboard(root: Path, runs: list[dict[str, Any]], evals: list[dict[st
     latest_eval = evals[0] if evals else {}
     latest_rag = get_primary_rag_summary(latest_eval)
     latest_success_rate = format_rate(latest_eval.get("successRate"))
-    latest_hit_at_3 = format_rate(latest_rag.get("hitAt3") if latest_rag else None)
-    latest_mrr = format_rate(latest_rag.get("mrr") if latest_rag else None)
-    latest_coverage = format_rate(latest_rag.get("coverage") if latest_rag else None)
+    latest_recall_at_5 = format_rate(latest_rag.get("recallAt5") if latest_rag else None)
+    latest_useful_at_3 = format_rate(latest_rag.get("usefulAt3") if latest_rag else None)
+    latest_ndcg_at_5 = format_rate(latest_rag.get("ndcgAt5") if latest_rag else None)
     return f"""<!doctype html>
 <html lang="zh-CN">
 <head>
@@ -164,9 +164,9 @@ def render_dashboard(root: Path, runs: list[dict[str, Any]], evals: list[dict[st
       <div class="metric"><strong>{len(runs)}</strong><span>修复 run 总数</span><span class="hint">真实 PR 和本地 fixture 的修复记录</span></div>
       <div class="metric"><strong>{success_runs}</strong><span>成功 run</span><span class="hint">已选 patch 通过本地验证</span></div>
       <div class="metric"><strong>{latest_success_rate}</strong><span>最新 eval 成功率</span><span class="hint">{escape(str(latest_eval.get("caseCount", "n/a")))} cases / {escape(str(latest_eval.get("total", "n/a")))} runs</span></div>
-      <div class="metric"><strong>{latest_hit_at_3}</strong><span>RAG Hit@3</span><span class="hint">Top 3 evidence 命中预期修复依据</span></div>
-      <div class="metric"><strong>{latest_mrr}</strong><span>RAG MRR</span><span class="hint">预期 evidence 排名越靠前越好</span></div>
-      <div class="metric"><strong>{latest_coverage}</strong><span>RAG Coverage</span><span class="hint">至少召回一个预期 evidence 的比例</span></div>
+      <div class="metric"><strong>{latest_recall_at_5}</strong><span>RAG Recall@5</span><span class="hint">Top 5 至少有一个有用 evidence</span></div>
+      <div class="metric"><strong>{latest_useful_at_3}</strong><span>RAG Useful@3</span><span class="hint">Top 3 可指导 patch 生成</span></div>
+      <div class="metric"><strong>{latest_ndcg_at_5}</strong><span>RAG nDCG@5</span><span class="hint">相关 evidence 排名质量</span></div>
     </section>
     <section class="panel">
       <h2>最新 Eval 概览</h2>
@@ -238,14 +238,15 @@ def render_evals_table(root: Path, evals: list[dict[str, Any]]) -> str:
   <td>{escape(str(item.get("total", 0)))}</td>
   <td>{escape(str(item.get("success", 0)))}</td>
   <td>{escape(str(item.get("successRate", "n/a")))}</td>
-  <td>{render_rag_metric(item, "hitAt1")}</td>
-  <td>{render_rag_metric(item, "hitAt3")}</td>
+  <td>{render_rag_metric(item, "recallAt5")}</td>
+  <td>{render_rag_metric(item, "usefulAt3")}</td>
+  <td>{render_rag_metric(item, "ndcgAt5")}</td>
   <td>{render_rag_metric(item, "mrr")}</td>
   <td>{escape(str(item.get("avgDurationMs", "n/a")))} ms</td>
 </tr>"""
         for item in evals[:20]
     )
-    return f"<div class=\"table-wrap\"><table><thead><tr><th>Eval</th><th>Cases</th><th>成功数</th><th>成功率</th><th>RAG Hit@1</th><th>RAG Hit@3</th><th>RAG MRR</th><th>平均耗时</th></tr></thead><tbody>{rows}</tbody></table></div>"
+    return f"<div class=\"table-wrap\"><table><thead><tr><th>Eval</th><th>Cases</th><th>成功数</th><th>成功率</th><th>Recall@5</th><th>Useful@3</th><th>nDCG@5</th><th>MRR</th><th>平均耗时</th></tr></thead><tbody>{rows}</tbody></table></div>"
 
 
 def render_latest_eval_summary(root: Path, eval_summary: dict[str, Any]) -> str:
@@ -257,10 +258,11 @@ def render_latest_eval_summary(root: Path, eval_summary: dict[str, Any]) -> str:
     rag_text = "暂无 RAG 期望 evidence"
     if rag:
         rag_text = (
-            f"Hit@1={format_rate(rag.get('hitAt1'))}, "
-            f"Hit@3={format_rate(rag.get('hitAt3'))}, "
+            f"Recall@5={format_rate(rag.get('recallAt5'))}, "
+            f"Useful@3={format_rate(rag.get('usefulAt3'))}, "
+            f"nDCG@5={format_rate(rag.get('ndcgAt5'))}, "
             f"MRR={format_rate(rag.get('mrr'))}, "
-            f"Coverage={format_rate(rag.get('coverage'))}"
+            f"Legacy Hit@3={format_rate(rag.get('legacyHitAt3'))}"
         )
     return f"""<div class="grid">
   <div class="metric"><strong>{escape(str(eval_summary.get("caseCount", "n/a")))}</strong><span>Case 数</span><span class="hint">{escape(str(eval_summary.get("casesRoot", "")))}</span></div>

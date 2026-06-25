@@ -596,7 +596,7 @@ Dashboard 在 `cifix/dashboard.py`，它会扫描 artifacts 下的 run、eval、
 - run 数量。
 - 成功 run 数。
 - 最新 eval 成功率、case 数、平均耗时。
-- RAG 评测指标：Hit@1、Hit@3、MRR、Coverage。
+- RAG 评测指标：Recall@5、Useful@3、nDCG@5、MRR，并保留 legacy fixed-id Hit@1/Hit@3 作为参考。
 - 最近 run 的失败类型、项目、源 PR、修复 PR。
 - Patch Tournament 的候选数量、通过数量、最佳候选和风险分数。
 - Top RAG evidence 的来源、分数和策略摘要。
@@ -636,6 +636,16 @@ python3 -m cifix.cli eval \
   --memory-path artifacts/memory/verified-repairs.json
 ```
 
+Cold-start vs warm-start RAG eval：
+
+```bash
+python3 -m cifix.cli eval \
+  --cases fixtures-python \
+  --out artifacts/eval-python15-rag-modes \
+  --memory-path artifacts/memory/verified-repairs.json \
+  --rag-eval-modes
+```
+
 Ablation eval：
 
 ```bash
@@ -651,14 +661,20 @@ python3 -m cifix.cli eval \
 - `no_memory`：关闭历史记忆，观察 RAG 的贡献。
 - `single_candidate`：只保留一个候选 patch，观察 tournament 的贡献。
 
-RAG 效果评测也写入 `report.md` 和 `summary.json`：
+RAG 效果评测也写入 `report.md` 和 `summary.json`。当前不再把固定 `expectedRagIds` 当成主指标，因为固定 id 大多指向人工预置 playbook，会低估更具体的历史 repair memory。新的主指标基于 semantic relevance：
 
-- `Hit@1`：预期修复依据排在第一名的比例。
-- `Hit@3`：预期修复依据出现在 Top 3 的比例。
-- `MRR`：第一个预期修复依据的平均倒数排名，越接近 1 越好。
-- `Coverage`：至少召回一个预期修复依据的比例。
+- `Recall@5`：Top 5 至少有一个相关 evidence。
+- `Useful@3`：Top 3 至少有一个能指导 patch 生成的 evidence。
+- `nDCG@5`：按 0-3 分相关性评价 evidence 排名质量。
+- `MRR`：第一个 useful evidence 的倒数排名。
+- `Legacy Hit@1/Hit@3`：固定 id 命中指标，只作为回归参考，不作为主要 RAG 效果结论。
 
-当前本地混合语言 eval 已验证 5/5 修复成功；Python benchmark 已验证 15/15 修复成功，并输出 RAG Hit@1 / Hit@3 / MRR / Coverage 指标。对简历来说，这比“我做了一个 agent demo”更有说服力，因为它有可重复的评测样例、对照实验和明确的 RAG 评估口径。
+RAG eval 分成两种模式：
+
+- `rag_cold_start`：只使用静态 playbook，不加载历史 repair memory，用来评估系统冷启动时有没有基础修复知识。
+- `rag_warm_start`：使用历史 repair memory，但会按 case 过滤掉疑似同 case 自己产生的记忆，避免数据泄漏，更接近 leave-one-out 评测。
+
+当前本地混合语言 eval 已验证 5/5 修复成功；Python benchmark 已验证 15/15 修复成功。最新 RAG modes benchmark 为 30/30 修复成功，其中 cold-start Recall@5 1.0、nDCG@5 0.927；warm-start leave-one-out Recall@5 0.867、nDCG@5 0.71。这个结果说明静态 playbook 覆盖较好，但当前历史 memory 规模还小、相似 case 噪声偏高，过滤自记忆后 warm-start 仍有优化空间。
 
 ## 16. 权限模式
 
@@ -873,7 +889,7 @@ GitHub failed PR
 如果要更具体：
 
 - 本地混合语言 fixture 覆盖 JavaScript 断言失败、lint 失败、Python unittest 断言失败等场景。
-- Python benchmark 扩展到 15 个 unittest 场景，并能输出 RAG Hit@1、Hit@3、MRR、Coverage。
+- Python benchmark 扩展到 15 个 unittest 场景，并能输出 semantic Recall@5、Useful@3、nDCG@5、MRR 和 legacy fixed-id Hit 指标。
 - eval 可以对比完整系统、去掉记忆、只生成单候选三种模式。
 - 真实 GitHub demo 覆盖手动触发、watcher 自动触发、repair PR 创建、源 PR 评论和 gated auto-merge。
 - 每次 run 都有 trace、report、patch diff、RAG evidence 和 GitHub write-back artifact。
@@ -964,6 +980,16 @@ python3 -m cifix.cli eval \
   --cases fixtures-python \
   --out artifacts/eval-python15 \
   --memory-path artifacts/memory/verified-repairs.json
+```
+
+RAG cold/warm 评测：
+
+```bash
+python3 -m cifix.cli eval \
+  --cases fixtures-python \
+  --out artifacts/eval-python15-rag-modes \
+  --memory-path artifacts/memory/verified-repairs.json \
+  --rag-eval-modes
 ```
 
 真实 GitHub 只读：

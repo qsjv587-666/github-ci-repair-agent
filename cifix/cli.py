@@ -141,7 +141,7 @@ Usage:
   cifix watch --repo owner/repo --interval-seconds 300 [--max-cycles 3] [--token-env GITHUB_TOKEN]
   cifix rag --query "ERR_ASSERTION disabled false true" [--memory-path artifacts/memory/verified-repairs.json] [--vector-db sqlite|chroma] [--embedding-provider hash|dashscope|zhipu]
   cifix dashboard [--artifacts artifacts] [--out artifacts/dashboard/index.html]
-  cifix eval --cases fixtures [--out artifacts/eval] [--use-model] [--compare-baselines]
+  cifix eval --cases fixtures [--out artifacts/eval] [--use-model] [--compare-baselines] [--rag-eval-modes]
   cifix run --repo <path> --command "npm test" --log <ci-log> [--out artifacts] [--setup-command "npm ci"] [--memory-path artifacts/memory/verified-repairs.json]
   cifix run --url https://github.com/owner/repo/pull/123 --token-env GITHUB_TOKEN
   cifix run --url https://github.com/owner/repo/actions/runs/456/job/789 --token-env GITHUB_TOKEN

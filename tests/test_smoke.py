@@ -9,7 +9,7 @@ from pathlib import Path
 from unittest.mock import patch
 
 from cifix.dashboard import generate_dashboard
-from cifix.eval import discover_cases, run_eval
+from cifix.eval import discover_cases, grade_hit_relevance, relevance_profile_for_case, run_eval
 from cifix.agents.failure_triage_agent import create_failure_fingerprint
 from cifix.agents.github_writer_agent import auto_merge_gate_error, build_repair_branch, run_github_writer_agent
 from cifix.github import load_github_context, parse_github_url
@@ -59,12 +59,32 @@ class CifixSmokeTest(unittest.TestCase):
             self.assertIn("react-button-broken", report)
             self.assertIn("todo-filter-broken", report)
             self.assertIn("RAG Evidence Metrics", report)
+            self.assertIn("Recall@5", report)
 
     def test_python_benchmark_discovers_15_cases_with_rag_expectations(self) -> None:
         cases = discover_cases(Path("fixtures-python"))
         self.assertEqual(len(cases), 15)
         self.assertTrue(all(case["command"] == "python3 -m unittest" for case in cases))
         self.assertTrue(all(case.get("expectedRagIds") for case in cases))
+        self.assertTrue(all(relevance_profile_for_case(case).get("concepts") for case in cases))
+
+    def test_rag_relevance_accepts_useful_verified_repair_memory(self) -> None:
+        case = {
+            "name": "py03_profile_contract",
+            "category": "python_contract_mismatch",
+            "expectedChangedFiles": ["src/report.py"],
+            "expectedRagIds": ["playbook_python_missing_data_guard"],
+        }
+        hit = {
+            "id": "repair_profile_contract",
+            "source": "verified-repair",
+            "failureType": "runtime_error",
+            "errorCode": "KeyError",
+            "language": "python",
+            "strategy": "report generation should use the profile field exposed by the service contract.",
+            "changedFiles": ["src/report.py"],
+        }
+        self.assertEqual(grade_hit_relevance(case, hit, relevance_profile_for_case(case)), 3)
 
     def test_eval_compare_baselines_runs_multiple_variants(self) -> None:
         with tempfile.TemporaryDirectory(prefix="cifix-baseline-") as out:
@@ -76,6 +96,44 @@ class CifixSmokeTest(unittest.TestCase):
             self.assertEqual(len(summary["variantSummary"]), 3)
             report = Path(result["reportPath"]).read_text()
             self.assertIn("Variant Summary", report)
+
+    def test_eval_rag_modes_runs_cold_and_warm_variants(self) -> None:
+        captured = []
+
+        def fake_run_cifix(flags: dict):
+            captured.append(flags)
+            out = Path(flags["out"])
+            out.mkdir(parents=True, exist_ok=True)
+            report = out / "report.md"
+            patch_path = out / "patch.diff"
+            trace = out / "trace.json"
+            report.write_text("# report\n")
+            patch_path.write_text("")
+            trace.write_text("{}")
+            (out / "repair-playbook-hits.json").write_text(
+                json.dumps(
+                    [
+                        {
+                            "id": "playbook_python_assertion_source_contract",
+                            "source": "static-playbook",
+                            "failureType": "test_assertion_failure",
+                            "errorCode": "ASSERTION",
+                            "language": "python",
+                            "strategy": "For Python assertion failures, prefer fixing the source contract.",
+                        }
+                    ]
+                )
+            )
+            return {"runId": "run_fake", "status": "success", "paths": {"report": str(report), "patch": str(patch_path), "trace": str(trace)}}
+
+        with tempfile.TemporaryDirectory(prefix="cifix-eval-rag-modes-") as out:
+            with patch("cifix.eval.run_cifix", side_effect=fake_run_cifix):
+                result = run_eval({"cases": "fixtures-python", "out": out, "rag-eval-modes": True})
+            summary = json.loads(Path(result["summaryPath"]).read_text())
+        self.assertEqual(summary["variants"], ["rag_cold_start", "rag_warm_start"])
+        self.assertEqual(summary["total"], 30)
+        self.assertEqual(len(summary["ragSummary"]), 2)
+        self.assertIn("recallAt5", summary["ragSummary"][0])
 
     def test_python_fixture_can_be_repaired(self) -> None:
         with tempfile.TemporaryDirectory(prefix="cifix-python-fixture-") as out:
@@ -363,7 +421,7 @@ class CifixSmokeTest(unittest.TestCase):
             self.assertIn("CIFix Agent 看板", html)
             self.assertIn("react-button-broken", html)
             self.assertIn("最新 eval 成功率", html)
-            self.assertIn("RAG Hit@3", html)
+            self.assertIn("RAG Recall@5", html)
             self.assertIn("Top RAG Evidence", html)
 
     def test_status_writes_pr_ci_snapshot_artifacts(self) -> None:

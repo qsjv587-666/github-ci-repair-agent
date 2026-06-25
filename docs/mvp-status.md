@@ -22,7 +22,7 @@ It supports:
 - Optional gated auto-merge of low-risk repair PRs with `--auto-merge-repair-pr`.
 - Eval runner with baseline comparison.
 - Python benchmark eval suite with 15 unittest-based CI failure cases.
-- RAG evidence metrics: Hit@1, Hit@3, MRR, and Coverage.
+- RAG evidence metrics: semantic Recall@5, Useful@3, nDCG@5, MRR, plus legacy fixed-id Hit@1/Hit@3 for reference.
 - Static Chinese dashboard over run/eval/inspect/status artifacts, including latest eval and RAG metrics.
 
 It does not support in MVP:
@@ -67,6 +67,16 @@ python3 -m cifix.cli eval \
   --cases fixtures-python \
   --out artifacts/eval-python15 \
   --memory-path artifacts/memory/verified-repairs.json
+```
+
+Cold-start vs warm-start RAG eval:
+
+```bash
+python3 -m cifix.cli eval \
+  --cases fixtures-python \
+  --out artifacts/eval-python15-rag-modes \
+  --memory-path artifacts/memory/verified-repairs.json \
+  --rag-eval-modes
 ```
 
 Baseline comparison:
@@ -183,7 +193,7 @@ Latest local verification:
 ```text
 python3 -m compileall -q cifix tests
 python3 -m unittest discover -s tests
-29 tests OK
+31 tests OK
 
 python3 -m cifix.cli eval --cases fixtures --out artifacts/eval
 cases: 5
@@ -196,7 +206,14 @@ cases: 15
 total_runs: 15
 success: 15
 success_rate: 1.0
-RAG metrics: Hit@1 0.067, Hit@3 0.667, MRR 0.38, Coverage 0.867
+
+python3 -m cifix.cli eval --cases fixtures-python --out artifacts/eval-python15-rag-modes --memory-path artifacts/memory/verified-repairs.json --rag-eval-modes
+cases: 15
+total_runs: 30
+success: 30
+success_rate: 1.0
+rag_cold_start: Recall@5 1.0, Useful@3 1.0, nDCG@5 0.927, MRR 0.922
+rag_warm_start: Recall@5 0.867, Useful@3 0.8, nDCG@5 0.71, MRR 0.55
 
 python3 -m cifix.cli eval --cases fixtures --out artifacts/eval-baselines --compare-baselines
 cases: 5
@@ -221,11 +238,11 @@ Suggested metrics to report from the current MVP:
 - 5 / 5 success on mixed-language full eval.
 - 15 / 15 success on Python benchmark eval.
 - 15 / 15 successful runs in baseline comparison.
-- 29 unit/smoke tests.
+- 31 unit/smoke tests.
 - Read-only GitHub inspect verified on a public PR.
 - Real GitHub Python demo: source PR #14 failed on `KeyError: 'name'`; CIFix created repair PR #15; after merging #15 into the source branch, PR #14 CI reran successfully.
 - Hybrid RAG trace includes BM25 score, vector score, hybrid score, matched terms, vector backend, embedding provider/model, vector DB path, and index path.
-- Latest Python benchmark RAG metrics: Hit@1 0.067, Hit@3 0.667, MRR 0.38, Coverage 0.867.
+- Latest Python RAG modes metrics: cold-start Recall@5 1.0 / nDCG@5 0.927; warm-start leave-one-out Recall@5 0.867 / nDCG@5 0.71.
 
 ## Next Non-MVP Extensions
 

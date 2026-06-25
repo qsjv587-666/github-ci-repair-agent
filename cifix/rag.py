@@ -222,6 +222,7 @@ def document_from_repair(repair: dict[str, Any]) -> dict[str, Any]:
 
 def to_repair_hit(payload: dict[str, Any]) -> dict[str, Any]:
     fingerprint = payload.get("fingerprint", {})
+    patch_summary = payload.get("patchSummary", {})
     return {
         "id": payload.get("id", "unknown"),
         "failureSignature": payload.get("failureSignature") or fingerprint.get("normalizedSignature"),
@@ -229,6 +230,8 @@ def to_repair_hit(payload: dict[str, Any]) -> dict[str, Any]:
         "errorCode": payload.get("errorCode") or fingerprint.get("errorCode"),
         "language": payload.get("language") or fingerprint.get("language"),
         "strategy": payload.get("strategy", "Reuse retrieved repair evidence."),
+        "changedFiles": patch_summary.get("changedFiles", []),
+        "changedFilePatterns": payload.get("changedFilePatterns", []),
         "verificationCommands": payload.get("verificationCommands", []),
         "successCount": payload.get("successCount", 0),
         "failureCount": payload.get("failureCount", 0),

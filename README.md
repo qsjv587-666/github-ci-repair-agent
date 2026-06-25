@@ -39,6 +39,16 @@ python3 -m cifix.cli eval \
   --memory-path artifacts/memory/verified-repairs.json
 ```
 
+Run cold-start vs warm-start RAG evaluation:
+
+```bash
+python3 -m cifix.cli eval \
+  --cases fixtures-python \
+  --out artifacts/eval-python15-rag-modes \
+  --memory-path artifacts/memory/verified-repairs.json \
+  --rag-eval-modes
+```
+
 Run eval with ablation baselines:
 
 ```bash
@@ -129,7 +139,7 @@ Current scope:
 - Optional local watcher via `watch`: poll open GitHub PRs, detect failed CI, trigger the repair workflow once per failed head SHA / workflow run, and optionally comment back on the source PR.
 - Eval runner over multiple CI failure fixtures.
 - Python-only benchmark suite under `fixtures-python`, currently covering 15 unittest-based CI failure cases.
-- RAG evidence metrics in eval reports: Hit@1, Hit@3, MRR, and Coverage.
+- RAG evidence metrics in eval reports: semantic Recall@5, Useful@3, nDCG@5, MRR, plus legacy fixed-id Hit@1/Hit@3 for reference.
 - Baseline comparison for `full`, `no_memory`, and `single_candidate` eval variants.
 - Static Chinese dashboard for run/eval/inspect/status artifact browsing, including latest eval and RAG metrics.
 
@@ -311,5 +321,16 @@ Latest verified Python benchmark:
 cases: 15
 success: 15
 success_rate: 1
-RAG metrics: Hit@1 0.067, Hit@3 0.667, MRR 0.38, Coverage 0.867
+```
+
+Latest RAG modes benchmark:
+
+```text
+python3 -m cifix.cli eval --cases fixtures-python --out artifacts/eval-python15-rag-modes --memory-path artifacts/memory/verified-repairs.json --rag-eval-modes
+cases: 15
+total_runs: 30
+success: 30
+success_rate: 1.0
+rag_cold_start: Recall@5 1.0, Useful@3 1.0, nDCG@5 0.927, MRR 0.922
+rag_warm_start: Recall@5 0.867, Useful@3 0.8, nDCG@5 0.71, MRR 0.55
 ```
