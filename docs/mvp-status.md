@@ -272,6 +272,7 @@ Suggested metrics to report from the current MVP:
 - 38 unit/smoke tests.
 - Read-only GitHub inspect verified on a public PR.
 - Real GitHub Python demo: source PR #14 failed on `KeyError: 'name'`; CIFix created repair PR #15; after merging #15 into the source branch, PR #14 CI reran successfully.
+- Complex real GitHub Python demo: source PR #16 failed on a multi-file profile contract mismatch; CIFix created repair PR #17 with a 3-source-file patch; after merging #17 into the source branch, PR #16 CI reran successfully.
 - Real-world Python repo performance smoke on a depth-1 `psf/requests` clone: injected ruff F401 failure repaired successfully in 12.84s wall time.
 - Hybrid RAG trace includes BM25 score, vector score, hybrid score, matched terms, vector backend, embedding provider/model, vector DB path, and index path.
 - Latest Python RAG modes metrics: cold-start Recall@5 1.0 / nDCG@5 0.934; warm-start leave-one-out Recall@5 0.867 / nDCG@5 0.758.

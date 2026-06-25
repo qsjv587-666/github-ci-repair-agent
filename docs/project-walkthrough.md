@@ -50,7 +50,7 @@
 - Agent 自动创建的修复 PR：`https://github.com/qsjv587-666/ci-repair-agent-demo/pull/4`
 - 修复后成功 CI run：`https://github.com/qsjv587-666/ci-repair-agent-demo/actions/runs/27607027519`
 
-目前真实 GitHub demo 已覆盖 4 类失败：
+目前真实 GitHub demo 已覆盖多类失败：
 
 | 场景 | 源失败 PR | Agent 修复 PR | 修复后状态 |
 |---|---:|---:|---|
@@ -61,6 +61,7 @@
 | gated auto-merge counter demo | #9 | #11 | repair PR auto-merged, source PR CI success |
 | local watcher counter demo | #12 | #13 | watcher detected failed CI, created repair PR, commented on source PR |
 | Python profile contract KeyError | #14 | #15 | repair PR merged into source branch, source PR CI success |
+| Python multi-file profile contract | #16 | #17 | repair PR changed 3 source files, merged into source branch, source PR CI success |
 
 这说明当前项目不是只在本地 fixture 上跑通，而是已经完成真实 GitHub 仓库里的多类“失败 PR -> 修复 PR -> 合并修复 -> 原 PR CI 变绿”闭环。
 
@@ -918,6 +919,7 @@ GitHub failed PR
 - RAG reranker 会在 BM25 + vector 之后结合 failureType、errorCode、文件重合、strategy 关键词和 memory quality 做二次排序。
 - eval 可以对比完整系统、去掉记忆、只生成单候选三种模式。
 - 真实 GitHub demo 覆盖手动触发、watcher 自动触发、repair PR 创建、源 PR 评论和 gated auto-merge。
+- 复杂真实 GitHub PR #16 覆盖多文件 Python 字段契约失败，agent 创建 #17，修复 patch 同时修改 `summary.py`、`serializer.py`、`notifications.py`，合并后 #16 CI success。
 - 每次 run 都有 trace、report、patch diff、RAG evidence 和 GitHub write-back artifact。
 
 ### 18.8 这个项目和 Codex / Claude 最大区别是什么
@@ -973,7 +975,7 @@ GitHub failed PR
 
 5. **落地验证**
    - 本地混合语言 fixture 5/5，Python benchmark 15/15，项目级 Python benchmark 12/12，真实开源 Python 仓库性能 smoke 1/1。
-   - 真实 GitHub demo：#1/#3/#5/#7 四类失败，agent 创建 #2/#4/#6/#8 修复 PR，合并修复 PR 后源 PR CI success；#12 watcher 自动发现失败 CI，创建 #13 repair PR，并评论回源 PR；#14 Python 字段契约失败由 agent 创建 #15 修复 PR，合并后源 PR CI success。
+   - 真实 GitHub demo：#1/#3/#5/#7 四类失败，agent 创建 #2/#4/#6/#8 修复 PR，合并修复 PR 后源 PR CI success；#12 watcher 自动发现失败 CI，创建 #13 repair PR，并评论回源 PR；#14 Python 字段契约失败由 agent 创建 #15 修复 PR，合并后源 PR CI success；#16 多文件 Python 字段契约失败由 agent 创建 #17，修复 3 个源文件后源 PR CI success。
 
 6. **工程边界**
    - 命令 allowlist。
