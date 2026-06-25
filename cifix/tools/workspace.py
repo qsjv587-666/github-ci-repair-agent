@@ -86,6 +86,8 @@ def read_log(log_path: str | None) -> str:
 def infer_command(workspace_dir: Path) -> str:
     if (workspace_dir / "package.json").exists():
         return "npm test"
+    if has_pytest_config(workspace_dir):
+        return "pytest"
     if (workspace_dir / "tests").exists() or any(path.name.startswith("test_") and path.suffix == ".py" for path in workspace_dir.rglob("*.py")):
         return "python3 -m unittest"
     return "echo 'No command inferred'"
@@ -103,7 +105,18 @@ def infer_setup_command(workspace_dir: Path, *, enabled: bool) -> str | None:
             return "yarn install --frozen-lockfile"
     if (workspace_dir / "requirements.txt").exists():
         return "python -m pip install -r requirements.txt"
+    if (workspace_dir / "pyproject.toml").exists():
+        return "python -m pip install -e ."
     return None
+
+
+def has_pytest_config(workspace_dir: Path) -> bool:
+    if (workspace_dir / "pytest.ini").exists() or (workspace_dir / "conftest.py").exists():
+        return True
+    pyproject = workspace_dir / "pyproject.toml"
+    if pyproject.exists() and "[tool.pytest" in pyproject.read_text(errors="ignore"):
+        return True
+    return False
 
 
 def map_repo(workspace_dir: Path) -> dict[str, Any]:
@@ -123,7 +136,7 @@ def map_repo(workspace_dir: Path) -> dict[str, Any]:
     if not languages:
         languages.append("unknown")
 
-    package_manager = "pnpm" if (workspace_dir / "pnpm-lock.yaml").exists() else "npm" if package_json_path.exists() else "pip" if (workspace_dir / "requirements.txt").exists() else None
+    package_manager = "pnpm" if (workspace_dir / "pnpm-lock.yaml").exists() else "npm" if package_json_path.exists() else "pip" if (workspace_dir / "requirements.txt").exists() or (workspace_dir / "pyproject.toml").exists() else None
 
     return {
         "files": files,

@@ -1,0 +1,9 @@
+=================================== FAILURES ===================================
+______________________ test_build_visit_summary_contract ______________________
+tests/test_summary.py:7: in test_build_visit_summary_contract
+    summary = build_visit_summary("p-1001")
+src/clinic/summary.py:9: in build_visit_summary
+    "title": f"Follow-up summary for {profile['name']}",
+E   KeyError: 'name'
+=========================== short test summary info ============================
+FAILED tests/test_summary.py::test_build_visit_summary_contract - KeyError: 'name'

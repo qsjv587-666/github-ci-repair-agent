@@ -22,6 +22,12 @@ DEFAULT_ALLOWED_PREFIXES = (
     "pytest",
     "python -m pytest",
     "python3 -m pytest",
+    "ruff check",
+    "python -m ruff check",
+    "python3 -m ruff check",
+    "mypy",
+    "python -m mypy",
+    "python3 -m mypy",
 )
 
 DEFAULT_SETUP_ALLOWED_PREFIXES = (
@@ -34,6 +40,9 @@ DEFAULT_SETUP_ALLOWED_PREFIXES = (
     "pip install -r requirements.txt",
     "python -m pip install -r requirements.txt",
     "python3 -m pip install -r requirements.txt",
+    "pip install -e .",
+    "python -m pip install -e .",
+    "python3 -m pip install -e .",
 )
 
 FORBIDDEN_SHELL_TOKENS = (";", "&&", "||", "|", ">", "<", "`", "$(", "\n")

@@ -84,7 +84,7 @@ class HybridRepairRAG:
                     "retrieval": "hybrid-bm25-vector",
                 }
             )
-        hits = sorted(hits, key=lambda item: item["hybridScore"], reverse=True)[:top_k]
+        hits = rerank_hits(query_text, hits)[:top_k]
         return {
             "hits": hits,
             "stats": {
@@ -96,7 +96,7 @@ class HybridRepairRAG:
                 "embeddingProvider": self.embedding_provider.name,
                 "embeddingModel": self.embedding_provider.model,
                 "vectorDims": self.embedding_provider.dimensions,
-                "ranker": "0.55*BM25 + 0.35*vector + 0.10*confidence",
+                "ranker": "hybrid retrieval + deterministic evidence reranker",
             },
         }
 
@@ -236,8 +236,82 @@ def to_repair_hit(payload: dict[str, Any]) -> dict[str, Any]:
         "successCount": payload.get("successCount", 0),
         "failureCount": payload.get("failureCount", 0),
         "confidence": payload.get("confidence", 0.7),
+        "quality": payload.get("quality", {}),
         "reasons": [],
     }
+
+
+def rerank_hits(query_text: str, hits: list[dict[str, Any]]) -> list[dict[str, Any]]:
+    query = parse_query_text(query_text)
+    query_tokens = set(tokenize(query_text))
+    query_files = set(query.get("failedFiles", [])) | set(query.get("changedFiles", []))
+    query_file_names = {Path(file).name.lower() for file in query_files}
+    reranked = []
+    for hit in hits:
+        score = float(hit.get("hybridScore", 0))
+        reasons = []
+        if hit.get("failureType") and hit.get("failureType") == query.get("failureType"):
+            score += 0.08
+            reasons.append("failureType")
+        if hit.get("errorCode") and hit.get("errorCode") == query.get("errorCode"):
+            score += 0.08
+            reasons.append("errorCode")
+        hit_files = set(hit.get("changedFiles") or [])
+        hit_file_names = {Path(file).name.lower() for file in hit_files}
+        if query_files & hit_files or query_file_names & hit_file_names:
+            score += 0.14
+            reasons.append("fileOverlap")
+        strategy_tokens = significant_tokens(hit.get("strategy", ""))
+        overlap = strategy_tokens & query_tokens
+        if overlap:
+            boost = min(0.12, len(overlap) * 0.03)
+            score += boost
+            reasons.append(f"strategyOverlap:{len(overlap)}")
+        quality = hit.get("quality") or {}
+        if quality.get("reuseCount"):
+            score += min(0.04, int(quality.get("reuseCount", 0)) * 0.01)
+        if hit.get("source") == "verified-repair" and not (overlap or query_files & hit_files or query_file_names & hit_file_names):
+            score -= 0.08
+            reasons.append("genericMemoryPenalty")
+        updated = dict(hit)
+        updated["rerankScore"] = round(score, 3)
+        updated["rerankReasons"] = reasons
+        reranked.append(updated)
+    return sorted(reranked, key=lambda item: item["rerankScore"], reverse=True)
+
+
+def parse_query_text(query_text: str) -> dict[str, Any]:
+    result: dict[str, Any] = {}
+    for line in query_text.splitlines():
+        if ":" not in line:
+            continue
+        key, value = line.split(":", 1)
+        value = value.strip()
+        if key in {"failedFiles", "changedFiles"}:
+            result[key] = value.split()
+        else:
+            result[key] = value
+    return result
+
+
+def significant_tokens(text: str) -> set[str]:
+    stopwords = {
+        "should",
+        "return",
+        "source",
+        "contract",
+        "failure",
+        "fix",
+        "python",
+        "value",
+        "with",
+        "from",
+        "before",
+        "after",
+        "when",
+        "error",
+    }
+    return {token for token in tokenize(text) if len(token) >= 4 and token not in stopwords}
 
 
 def score_bm25(query_tokens: list[str], documents: list[dict[str, Any]]) -> list[float]:

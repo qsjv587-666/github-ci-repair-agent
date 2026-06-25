@@ -11,6 +11,7 @@ from unittest.mock import patch
 from cifix.dashboard import generate_dashboard
 from cifix.eval import discover_cases, grade_hit_relevance, relevance_profile_for_case, run_eval
 from cifix.agents.failure_triage_agent import create_failure_fingerprint
+from cifix.agents.memory_writer_agent import run_memory_writer_agent
 from cifix.agents.github_writer_agent import auto_merge_gate_error, build_repair_branch, run_github_writer_agent
 from cifix.github import load_github_context, parse_github_url
 from cifix.inspect import inspect_github
@@ -18,7 +19,7 @@ from cifix.rag import DashScopeEmbeddingProvider, HybridRepairRAG, ZhipuEmbeddin
 from cifix.rag import vector_db_from_flags
 from cifix.run import choose_sandbox_for_repo, run_cifix
 from cifix.status import inspect_status
-from cifix.tools.command import run_command
+from cifix.tools.command import DEFAULT_SETUP_ALLOWED_PREFIXES, run_command, validate_command
 from cifix.tools.workspace import infer_command, infer_setup_command
 from cifix.watch import build_dedupe_key, run_watch_once
 
@@ -67,6 +68,13 @@ class CifixSmokeTest(unittest.TestCase):
         self.assertTrue(all(case["command"] == "python3 -m unittest" for case in cases))
         self.assertTrue(all(case.get("expectedRagIds") for case in cases))
         self.assertTrue(all(relevance_profile_for_case(case).get("concepts") for case in cases))
+
+    def test_python_project_benchmark_declares_pytest_ruff_and_mypy_commands(self) -> None:
+        cases = discover_cases(Path("benchmarks/python-projects"))
+        self.assertEqual(len(cases), 3)
+        commands = {case["command"] for case in cases}
+        self.assertEqual(commands, {"python3 -m pytest", "python3 -m ruff check src", "python3 -m mypy src"})
+        self.assertTrue(all(case.get("setupCommand") == "python3 -m pip install -r requirements.txt" for case in cases))
 
     def test_rag_relevance_accepts_useful_verified_repair_memory(self) -> None:
         case = {
@@ -209,6 +217,12 @@ class CifixSmokeTest(unittest.TestCase):
             self.assertEqual(infer_setup_command(root, enabled=True), None)
             self.assertEqual(infer_command(root), "python3 -m unittest")
 
+    def test_python_ci_command_allowlist_includes_pytest_ruff_mypy(self) -> None:
+        self.assertIsNone(validate_command("python3 -m pytest"))
+        self.assertIsNone(validate_command("python3 -m ruff check src"))
+        self.assertIsNone(validate_command("python3 -m mypy src"))
+        self.assertIsNone(validate_command("python3 -m pip install -r requirements.txt", DEFAULT_SETUP_ALLOWED_PREFIXES))
+
     def test_python_command_overrides_mixed_repo_package_manager(self) -> None:
         fingerprint = create_failure_fingerprint(
             raw_log="",
@@ -219,6 +233,28 @@ class CifixSmokeTest(unittest.TestCase):
         )
         self.assertEqual(fingerprint["language"], "python")
         self.assertEqual(fingerprint["packageManager"], "python")
+
+    def test_python_lint_and_mypy_fingerprints(self) -> None:
+        ruff = create_failure_fingerprint(
+            raw_log="src/alerts/formatter.py:1:20: F401 `decimal.Decimal` imported but unused",
+            command="python3 -m ruff check src",
+            repo_map={"languages": ["python"], "packageManager": "pip"},
+            github_context=None,
+            reproduction={"stdout": "", "stderr": ""},
+        )
+        self.assertEqual(ruff["failureType"], "lint_error")
+        self.assertEqual(ruff["errorCode"], "F401")
+        self.assertEqual(ruff["packageManager"], "python")
+
+        mypy = create_failure_fingerprint(
+            raw_log='src/accounts/service.py:12: error: Incompatible return value type (got "str | None", expected "str")  [return-value]',
+            command="python3 -m mypy src",
+            repo_map={"languages": ["python"], "packageManager": "pip"},
+            github_context=None,
+            reproduction={"stdout": "", "stderr": ""},
+        )
+        self.assertEqual(mypy["failureType"], "typecheck_error")
+        self.assertEqual(mypy["errorCode"], "mypy:return-value")
 
     def test_github_pr_url_resolves_failed_run_job_and_logs(self) -> None:
         def fake_json(path: str, token: str | None):
@@ -499,7 +535,39 @@ class CifixSmokeTest(unittest.TestCase):
             self.assertIn("bm25Score", hit)
             self.assertIn("vectorScore", hit)
             self.assertIn("hybridScore", hit)
+            self.assertIn("rerankScore", hit)
             self.assertEqual(hit["retrieval"], "hybrid-bm25-vector")
+
+    def test_memory_writer_skips_high_risk_and_records_quality(self) -> None:
+        fingerprint = {
+            "normalizedSignature": "python:test_assertion_failure:ASSERTION:general",
+            "failureType": "test_assertion_failure",
+            "errorCode": "ASSERTION",
+            "language": "python",
+            "packageManager": "python",
+        }
+        with tempfile.TemporaryDirectory(prefix="cifix-memory-governance-") as tmp:
+            memory_path = Path(tmp) / "memory.json"
+            skipped = run_memory_writer_agent(
+                memory_path=memory_path,
+                fingerprint=fingerprint,
+                selected={"id": "bad", "verification": {"passed": True}, "riskTags": ["test-change"], "edits": [{"file": "tests/test_x.py"}]},
+                command="python3 -m pytest",
+                trace=[],
+            )
+            self.assertFalse(skipped["written"])
+            written = run_memory_writer_agent(
+                memory_path=memory_path,
+                fingerprint=fingerprint,
+                selected={"id": "good", "hypothesis": "fix source contract", "source": "rule", "verification": {"passed": True}, "riskTags": ["source-change"], "edits": [{"file": "src/service.py"}]},
+                command="python3 -m pytest",
+                trace=[],
+            )
+            self.assertTrue(written["written"])
+            records = json.loads(memory_path.read_text())["repairs"]
+            self.assertEqual(len(records), 1)
+            self.assertIn("recordKey", records[0])
+            self.assertIn("quality", records[0])
 
     def test_chroma_backend_reports_missing_dependency_cleanly(self) -> None:
         with tempfile.TemporaryDirectory(prefix="cifix-chroma-missing-") as out:

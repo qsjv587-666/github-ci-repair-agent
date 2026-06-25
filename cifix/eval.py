@@ -32,6 +32,7 @@ def run_eval(flags: dict[str, Any]) -> dict[str, Any]:
                     "command": case["command"],
                     "log": str(case["log"]),
                     "out": str(case_out),
+                    "setup-command": case.get("setupCommand"),
                     "use-model": flags.get("use-model"),
                     "memory-path": str(memory_path),
                     "vector-db": flags.get("vector-db"),
@@ -104,11 +105,12 @@ def discover_cases(cases_root: Path) -> list[dict[str, Any]]:
         package_json = entry / "package.json"
         log_path = entry / "ci-fail.log"
         meta = read_case_meta(entry)
+        command = meta.pop("command", None)
         if package_json.exists() and log_path.exists():
-            cases.append({"name": entry.name, "path": entry, "log": log_path, "command": "npm test", **meta})
+            cases.append({"name": entry.name, "path": entry, "log": log_path, "command": command or "npm test", **meta})
             continue
         if log_path.exists() and any(path.suffix == ".py" for path in entry.rglob("*.py")):
-            cases.append({"name": entry.name, "path": entry, "log": log_path, "command": "python3 -m unittest", **meta})
+            cases.append({"name": entry.name, "path": entry, "log": log_path, "command": command or "python3 -m unittest", **meta})
     return cases
 
 
@@ -377,6 +379,20 @@ CATEGORY_RELEVANCE_PROFILES: dict[str, dict[str, Any]] = {
         "strategies": ["normalize service data", "before transformation"],
         "failureTypes": ["test_assertion_failure"],
         "errorCodes": ["ASSERTION"],
+    },
+    "python_ruff_unused_import": {
+        "rootCause": "unused import lint failure",
+        "concepts": ["ruff", "f401", "unused import", "imported but unused"],
+        "strategies": ["remove unused imports", "unused imports"],
+        "failureTypes": ["lint_error"],
+        "errorCodes": ["F401"],
+    },
+    "python_mypy_optional_return": {
+        "rootCause": "optional return value type mismatch",
+        "concepts": ["mypy", "optional", "return value", "display_name"],
+        "strategies": ["typed fallback", "narrow none", "optional return"],
+        "failureTypes": ["typecheck_error"],
+        "errorCodes": ["mypy:return-value"],
     },
 }
 

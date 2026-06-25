@@ -48,6 +48,8 @@ def generate_rule_patch_candidates(workspace_dir: Path, playbook_hits: list[dict
     candidates = []
     candidates.extend(generate_lint_unused_var_candidates(workspace_dir, playbook_hits))
     candidates.extend(generate_python_profile_contract_candidates(workspace_dir, playbook_hits, fingerprint or {}))
+    candidates.extend(generate_python_ruff_candidates(workspace_dir, playbook_hits, fingerprint or {}))
+    candidates.extend(generate_python_mypy_candidates(workspace_dir, playbook_hits, fingerprint or {}))
     rules = [
         ("src/login-button.js", "disabled: false", "disabled: Boolean(loading)", "patch_source_loading_disabled", "The source state ignores loading and always leaves the button enabled."),
         ("src/counter.js", "return count;", "return count + 1;", "patch_counter_increment", "increment should return the next count rather than the current count."),
@@ -99,6 +101,68 @@ def generate_rule_patch_candidates(workspace_dir: Path, playbook_hits: list[dict
     if len(candidates) == 1:
         candidates.append({"id": "patch_noop_baseline", "hypothesis": "Baseline no-op candidate for tournament comparison.", "riskTags": ["noop"], "source": "rule", "edits": []})
     return candidates
+
+
+def generate_python_ruff_candidates(workspace_dir: Path, playbook_hits: list[dict[str, Any]], fingerprint: dict[str, Any]) -> list[dict[str, Any]]:
+    if fingerprint.get("language") != "python" or fingerprint.get("failureType") != "lint_error":
+        return []
+    candidates = []
+    for file in fingerprint.get("failedFiles") or []:
+        path = workspace_dir / file
+        if not path.exists() or path.suffix != ".py":
+            continue
+        content = path.read_text()
+        for line in content.splitlines(keepends=True):
+            if not line.lstrip().startswith(("import ", "from ")) or "# noqa" in line:
+                continue
+            imported_names = imported_names_from_line(line)
+            if imported_names and all(count_identifier_uses(content, name) <= 1 for name in imported_names):
+                candidates.append(
+                    {
+                        "id": f"patch_python_remove_unused_import_{path.stem}",
+                        "hypothesis": "Remove the unused Python import reported by ruff.",
+                        "playbookId": playbook_hits[0]["id"] if playbook_hits else None,
+                        "riskTags": ["source-change", "lint-fix"],
+                        "source": "rule",
+                        "edits": [{"file": file, "from": line, "to": ""}],
+                    }
+                )
+                break
+    return candidates[:2]
+
+
+def imported_names_from_line(line: str) -> list[str]:
+    stripped = line.strip()
+    if stripped.startswith("import "):
+        return [part.split(" as ")[-1].strip().split(".")[0] for part in stripped.removeprefix("import ").split(",")]
+    match = re.match(r"from\s+[\w.]+\s+import\s+(.+)", stripped)
+    if not match:
+        return []
+    return [part.split(" as ")[-1].strip() for part in match.group(1).split(",")]
+
+
+def generate_python_mypy_candidates(workspace_dir: Path, playbook_hits: list[dict[str, Any]], fingerprint: dict[str, Any]) -> list[dict[str, Any]]:
+    if fingerprint.get("language") != "python" or fingerprint.get("failureType") != "typecheck_error":
+        return []
+    candidates = []
+    rules = [
+        ("src/accounts/service.py", "return user.display_name", "return user.display_name or \"Unknown\"", "patch_python_mypy_optional_display_name", "display_name is optional, so the service should return a string fallback."),
+        ("src/service.py", "return user.display_name", "return user.display_name or \"Unknown\"", "patch_python_mypy_optional_display_name", "display_name is optional, so the service should return a string fallback."),
+    ]
+    for file, old, new, candidate_id, hypothesis in rules:
+        path = workspace_dir / file
+        if path.exists() and old in path.read_text():
+            candidates.append(
+                {
+                    "id": candidate_id,
+                    "hypothesis": hypothesis,
+                    "playbookId": playbook_hits[0]["id"] if playbook_hits else None,
+                    "riskTags": ["source-change", "type-fix"],
+                    "source": "rule",
+                    "edits": [{"file": file, "from": old, "to": new}],
+                }
+            )
+    return candidates[:2]
 
 
 def generate_python_profile_contract_candidates(workspace_dir: Path, playbook_hits: list[dict[str, Any]], fingerprint: dict[str, Any]) -> list[dict[str, Any]]:

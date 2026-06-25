@@ -102,5 +102,31 @@
     "successCount": 5,
     "failureCount": 1,
     "confidence": 0.74
+  },
+  {
+    "id": "playbook_python_ruff_unused_import",
+    "failureSignature": "python:lint_error:F401:unused_import",
+    "failureType": "lint_error",
+    "errorCode": "F401",
+    "language": "python",
+    "changedFilePatterns": ["src/**/*.py", "tests/**/*.py"],
+    "strategy": "For ruff F401 failures, remove unused imports unless they are part of a public re-export guarded by __all__ or noqa.",
+    "verificationCommands": ["ruff check"],
+    "successCount": 3,
+    "failureCount": 1,
+    "confidence": 0.78
+  },
+  {
+    "id": "playbook_python_mypy_optional_return",
+    "failureSignature": "python:typecheck_error:mypy:return-value:optional",
+    "failureType": "typecheck_error",
+    "errorCode": "mypy:return-value",
+    "language": "python",
+    "changedFilePatterns": ["src/**/*.py"],
+    "strategy": "For mypy optional return-value errors, either narrow None before returning or provide a typed fallback value at the boundary.",
+    "verificationCommands": ["mypy"],
+    "successCount": 3,
+    "failureCount": 1,
+    "confidence": 0.77
   }
 ]

@@ -621,6 +621,12 @@ Dashboard 在 `cifix/dashboard.py`，它会扫描 artifacts 下的 run、eval、
 
 第二层是 `fixtures-python/`，作为 Python-only benchmark，当前包含 15 个 unittest 场景，覆盖断言失败、业务规则错误、字段契约不一致、import refactor、None guard、缺失字段、过滤逻辑、序列化契约、配置单位、日期格式、环境变量默认值、聚合计算、权限逻辑、分页 offset 和多文件 pipeline normalization。
 
+第三层是 `benchmarks/python-projects/`，作为项目级 Python benchmark。它不再是单文件小题，而是按小型 Python 项目组织 package、pyproject、requirements、测试/静态检查命令和 CI 失败日志，当前覆盖：
+
+- `pytest` 多文件字段契约失败。
+- `ruff check` F401 unused import 失败。
+- `mypy` optional return-value 类型失败。
+
 基础 eval：
 
 ```bash
@@ -642,6 +648,16 @@ Cold-start vs warm-start RAG eval：
 python3 -m cifix.cli eval \
   --cases fixtures-python \
   --out artifacts/eval-python15-rag-modes \
+  --memory-path artifacts/memory/verified-repairs.json \
+  --rag-eval-modes
+```
+
+项目级 Python benchmark：
+
+```bash
+python3 -m cifix.cli eval \
+  --cases benchmarks/python-projects \
+  --out artifacts/eval-python-projects \
   --memory-path artifacts/memory/verified-repairs.json \
   --rag-eval-modes
 ```
@@ -674,7 +690,9 @@ RAG eval 分成两种模式：
 - `rag_cold_start`：只使用静态 playbook，不加载历史 repair memory，用来评估系统冷启动时有没有基础修复知识。
 - `rag_warm_start`：使用历史 repair memory，但会按 case 过滤掉疑似同 case 自己产生的记忆，避免数据泄漏，更接近 leave-one-out 评测。
 
-当前本地混合语言 eval 已验证 5/5 修复成功；Python benchmark 已验证 15/15 修复成功。最新 RAG modes benchmark 为 30/30 修复成功，其中 cold-start Recall@5 1.0、nDCG@5 0.927；warm-start leave-one-out Recall@5 0.867、nDCG@5 0.71。这个结果说明静态 playbook 覆盖较好，但当前历史 memory 规模还小、相似 case 噪声偏高，过滤自记忆后 warm-start 仍有优化空间。
+当前本地混合语言 eval 已验证 5/5 修复成功；Python benchmark 已验证 15/15 修复成功。最新 15-case RAG modes benchmark 为 30/30 修复成功，其中 cold-start Recall@5 1.0、nDCG@5 0.934；warm-start leave-one-out Recall@5 0.867、Useful@3 0.867、nDCG@5 0.758。这个结果说明静态 playbook 覆盖较好，但当前历史 memory 规模还小、相似 case 噪声偏高，过滤自记忆后 warm-start 仍有优化空间。
+
+项目级 Python benchmark 已验证 6/6 修复成功，覆盖 pytest / ruff / mypy 三类常见 Python CI；对应 RAG 指标为 cold-start Recall@5 1.0、nDCG@5 0.991，warm-start Recall@5 1.0、nDCG@5 0.933。
 
 ## 16. 权限模式
 
@@ -890,6 +908,9 @@ GitHub failed PR
 
 - 本地混合语言 fixture 覆盖 JavaScript 断言失败、lint 失败、Python unittest 断言失败等场景。
 - Python benchmark 扩展到 15 个 unittest 场景，并能输出 semantic Recall@5、Useful@3、nDCG@5、MRR 和 legacy fixed-id Hit 指标。
+- 项目级 Python benchmark 覆盖 pytest、ruff、mypy，不再只停留在 unittest 小样例。
+- Memory governance 会跳过 noop / test-change / possible-overfit 这类低质量记忆，并对重复修复做更新而不是无限追加。
+- RAG reranker 会在 BM25 + vector 之后结合 failureType、errorCode、文件重合、strategy 关键词和 memory quality 做二次排序。
 - eval 可以对比完整系统、去掉记忆、只生成单候选三种模式。
 - 真实 GitHub demo 覆盖手动触发、watcher 自动触发、repair PR 创建、源 PR 评论和 gated auto-merge。
 - 每次 run 都有 trace、report、patch diff、RAG evidence 和 GitHub write-back artifact。
@@ -906,7 +927,7 @@ GitHub failed PR
 
 可以主动说：
 
-> 当前版本已经覆盖 Node / JavaScript 和 Python unittest 基础场景，并把 Python benchmark 扩展到 15 个可重复评测 case。复杂多语言项目还需要继续扩展 repo mapper、测试命令推断和 patch 生成策略。当前触发方式是本地 watcher 轮询，不是 GitHub App webhook。Docker sandbox 已支持 setup、reproduce 和 patch verification 命令，并能对 Node 与 Python-only 项目做基础镜像选择。下一阶段更适合继续增加真实开源项目级别的 case、提高模型候选生成能力，并扩大 RAG 评测集。
+> 当前版本已经覆盖 Node / JavaScript、Python unittest，以及项目级 Python pytest / ruff / mypy 场景。复杂多语言项目还需要继续扩展 repo mapper、测试命令推断和 patch 生成策略。当前触发方式是本地 watcher 轮询，不是 GitHub App webhook。Docker sandbox 已支持 setup、reproduce 和 patch verification 命令，并能对 Node 与 Python-only 项目做基础镜像选择。下一阶段更适合继续增加真实开源项目级别的 case、提高模型候选生成能力，并扩大 RAG 评测集。
 
 这样回答会显得比较成熟：既说明项目价值，也知道边界。
 
@@ -914,7 +935,7 @@ GitHub failed PR
 
 为了面试时讲得可信，需要主动说明当前边界：
 
-- 目前已验证 Node / JavaScript demo 项目、Python unittest demo 项目，以及 15 个 Python benchmark case；更复杂的 Python 依赖、pytest 插件、monorepo 还需要继续扩展。
+- 目前已验证 Node / JavaScript demo 项目、Python unittest demo 项目、15 个 Python fixture benchmark，以及 3 个项目级 Python benchmark case；更复杂的 Python 依赖、pytest 插件、monorepo 还需要继续扩展。
 - patch 生成仍有规则 fallback，真实复杂项目需要更多语言和框架适配。
 - 当前是 CLI 工作台，可以通过本地 watcher 轮询 GitHub 触发修复，但还不是 GitHub webhook / GitHub App 服务。
 - Docker sandbox 需要本机安装 Docker；当前能为 Node 和 Python-only 项目选择基础镜像，复杂多语言项目仍建议显式指定镜像和命令。
@@ -946,7 +967,7 @@ GitHub failed PR
    - Patch Tournament。
 
 5. **落地验证**
-   - 本地混合语言 fixture 5/5，Python benchmark 15/15。
+   - 本地混合语言 fixture 5/5，Python benchmark 15/15，项目级 Python benchmark 6/6。
    - 真实 GitHub demo：#1/#3/#5/#7 四类失败，agent 创建 #2/#4/#6/#8 修复 PR，合并修复 PR 后源 PR CI success；#12 watcher 自动发现失败 CI，创建 #13 repair PR，并评论回源 PR；#14 Python 字段契约失败由 agent 创建 #15 修复 PR，合并后源 PR CI success。
 
 6. **工程边界**

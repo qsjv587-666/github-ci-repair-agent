@@ -1,0 +1,3 @@
+src/alerts/formatter.py:1:20: F401 [*] `decimal.Decimal` imported but unused
+Found 1 error.
+[*] 1 fixable with the `--fix` option.

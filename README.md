@@ -132,13 +132,15 @@ Current scope:
 - ChromaDB vector database backend via `--vector-db chroma` or `CIFIX_VECTOR_DB=chroma`; SQLite brute-force vector scan remains as the zero-dependency fallback.
 - Embedding providers: local hashing fallback, DashScope/Qwen `text-embedding-v4`, and Zhipu `embedding-3`.
 - Verified repair memory written only after tests pass, then indexed into the RAG store.
+- Memory governance: skip noop/test-changing/high-risk memories, deduplicate verified repairs, and persist quality/confidence metadata for reranking.
 - Patch Tournament with at least two candidates.
-- Command safety policy with an allowlist for test/lint/typecheck commands.
+- Command safety policy with an allowlist for test/lint/typecheck commands, including Python `unittest`, `pytest`, `ruff check`, and `mypy`.
 - Structured artifacts: report, trace, patch candidates, selected patch, risk report, PR comment draft, GitHub write-back result.
 - Optional GitHub write-back via `--create-pr`: commit the verified patch, push a repair branch, and create a PR when `GITHUB_TOKEN` has write permissions.
 - Optional local watcher via `watch`: poll open GitHub PRs, detect failed CI, trigger the repair workflow once per failed head SHA / workflow run, and optionally comment back on the source PR.
 - Eval runner over multiple CI failure fixtures.
 - Python-only benchmark suite under `fixtures-python`, currently covering 15 unittest-based CI failure cases.
+- Project-level Python benchmark suite under `benchmarks/python-projects`, covering pytest contract failure, ruff F401 lint failure, and mypy optional return-value failure.
 - RAG evidence metrics in eval reports: semantic Recall@5, Useful@3, nDCG@5, MRR, plus legacy fixed-id Hit@1/Hit@3 for reference.
 - Baseline comparison for `full`, `no_memory`, and `single_candidate` eval variants.
 - Static Chinese dashboard for run/eval/inspect/status artifact browsing, including latest eval and RAG metrics.
@@ -331,6 +333,18 @@ cases: 15
 total_runs: 30
 success: 30
 success_rate: 1.0
-rag_cold_start: Recall@5 1.0, Useful@3 1.0, nDCG@5 0.927, MRR 0.922
-rag_warm_start: Recall@5 0.867, Useful@3 0.8, nDCG@5 0.71, MRR 0.55
+rag_cold_start: Recall@5 1.0, Useful@3 1.0, nDCG@5 0.934, MRR 0.922
+rag_warm_start: Recall@5 0.867, Useful@3 0.867, nDCG@5 0.758, MRR 0.6
+```
+
+Latest project-level Python benchmark:
+
+```text
+python3 -m cifix.cli eval --cases benchmarks/python-projects --out artifacts/eval-python-projects --memory-path artifacts/memory/verified-repairs.json --rag-eval-modes
+cases: 3
+total_runs: 6
+success: 6
+success_rate: 1.0
+rag_cold_start: Recall@5 1.0, Useful@3 1.0, nDCG@5 0.991, MRR 1.0
+rag_warm_start: Recall@5 1.0, Useful@3 1.0, nDCG@5 0.933, MRR 1.0
 ```

@@ -1,0 +1,2 @@
+src/accounts/service.py:12: error: Incompatible return value type (got "str | None", expected "str")  [return-value]
+Found 1 error in 1 file (checked 2 source files)

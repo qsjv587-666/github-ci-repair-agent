@@ -14,12 +14,16 @@ def run_failure_triage_agent(*, raw_log: str, command: str, repo_map: dict[str, 
 
 def create_failure_fingerprint(raw_log: str, command: str, repo_map: dict[str, Any], github_context: dict[str, Any] | None, reproduction: dict[str, Any]) -> dict[str, Any]:
     combined = f"{raw_log}\n{reproduction.get('stdout', '')}\n{reproduction.get('stderr', '')}"
-    lint_rule_match = re.search(r"\b(?:no-unused-vars|@typescript-eslint/no-unused-vars|no-undef|no-console)\b", combined)
+    lint_rule_match = re.search(r"\b(?:no-unused-vars|@typescript-eslint/no-unused-vars|no-undef|no-console|F401|F841|E501|I001)\b", combined)
+    mypy_match = re.search(r"\berror:\s+.+\s+\[[a-z0-9-]+\]", combined, re.I)
     python_error_match = re.search(r"\b(?:ModuleNotFoundError|ImportError|KeyError|TypeError|ValueError|AttributeError)\b", combined)
     error_code_match = re.search(r"\bTS\d{4}\b", combined) or re.search(r"\bERR_[A-Z_]+\b", combined) or lint_rule_match or python_error_match
     error_code = error_code_match.group(0) if error_code_match else ("ASSERTION" if "AssertionError" in combined else "UNKNOWN")
     if error_code.startswith("TS"):
         failure_type = "typecheck_error"
+    elif mypy_match:
+        failure_type = "typecheck_error"
+        error_code = mypy_error_code(mypy_match.group(0))
     elif error_code in {"ModuleNotFoundError", "ImportError"}:
         failure_type = "import_error"
     elif error_code in {"KeyError", "TypeError", "ValueError", "AttributeError"}:
@@ -34,6 +38,7 @@ def create_failure_fingerprint(raw_log: str, command: str, repo_map: dict[str, A
         set(
             re.findall(r"\b(?:src|test|tests)/[A-Za-z0-9._/-]+\.(?:js|jsx|ts|tsx|py)\b", combined)
             + re.findall(r"\btest_[A-Za-z0-9._/-]+\.py\b", combined)
+            + re.findall(r"\b[A-Za-z0-9._/-]+\.py(?=:\d+)", combined)
         )
     )
     languages = repo_map.get("languages", [])
@@ -60,4 +65,11 @@ def create_failure_fingerprint(raw_log: str, command: str, repo_map: dict[str, A
 def infer_package_manager(command: str, repo_map: dict[str, Any]) -> str | None:
     if re.match(r"^python(?:3)?(?:\s|$)", command.strip()):
         return "python"
+    if re.match(r"^(pytest|ruff|mypy)(?:\s|$)", command.strip()):
+        return "python"
     return repo_map.get("packageManager")
+
+
+def mypy_error_code(line: str) -> str:
+    match = re.search(r"\[([a-z0-9-]+)\]", line, re.I)
+    return f"mypy:{match.group(1)}" if match else "mypy:error"

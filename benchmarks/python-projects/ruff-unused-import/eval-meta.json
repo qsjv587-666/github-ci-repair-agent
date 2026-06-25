@@ -1,0 +1,15 @@
+{
+  "command": "python3 -m ruff check src",
+  "setupCommand": "python3 -m pip install -r requirements.txt",
+  "category": "python_ruff_unused_import",
+  "difficulty": "project-level",
+  "expectedRagIds": ["playbook_python_ruff_unused_import"],
+  "expectedChangedFiles": ["src/alerts/formatter.py"],
+  "expectedEvidence": {
+    "rootCause": "unused import lint failure",
+    "concepts": ["ruff", "F401", "unused import"],
+    "strategies": ["remove unused imports"],
+    "failureTypes": ["lint_error"],
+    "errorCodes": ["F401"]
+  }
+}
