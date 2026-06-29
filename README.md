@@ -126,7 +126,7 @@ Current scope:
 
 - Local workspace execution for demo repo fixtures, with optional Docker sandboxing for setup, reproduction, and patch verification commands.
 - GitHub read-only context loading for PR metadata, changed files, workflow jobs, and job logs when a token is provided.
-- Optional Poe model mode for Claude Opus via OpenAI-compatible `/v1/chat/completions`.
+- Optional Poe model mode for Claude Opus via OpenAI-compatible `/v1/chat/completions`, now used by three LLM agents: Triage, Patch, and Review.
 - Failure Fingerprint generation.
 - Hybrid RAG memory retrieval: BM25 keyword retrieval + vector database retrieval + hybrid reranking.
 - ChromaDB vector database backend via `--vector-db chroma` or `CIFIX_VECTOR_DB=chroma`; SQLite brute-force vector scan remains as the zero-dependency fallback.
@@ -135,7 +135,7 @@ Current scope:
 - Memory governance: skip noop/test-changing/high-risk memories, deduplicate verified repairs, and persist quality/confidence metadata for reranking.
 - Patch Tournament with at least two candidates.
 - Command safety policy with an allowlist for test/lint/typecheck commands, including Python `unittest`, `pytest`, `ruff check`, and `mypy`.
-- Structured artifacts: report, trace, patch candidates, selected patch, risk report, PR comment draft, GitHub write-back result.
+- Structured artifacts: report, trace, LLM triage, patch candidates, LLM review, selected patch, risk report, PR comment draft, GitHub write-back result.
 - Optional GitHub write-back via `--create-pr`: commit the verified patch, push a repair branch, and create a PR when `GITHUB_TOKEN` has write permissions.
 - Optional local watcher via `watch`: poll open GitHub PRs, detect failed CI, trigger the repair workflow once per failed head SHA / workflow run, and optionally comment back on the source PR.
 - Eval runner over multiple CI failure fixtures.

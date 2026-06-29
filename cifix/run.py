@@ -55,7 +55,7 @@ def run_cifix(flags: dict[str, Any]) -> dict[str, Any]:
     raw_log = read_log(flags.get("log")) if flags.get("log") else (github_context or {}).get("rawLog", "")
 
     reproduction = run_reproducer_agent(workspace_dir=workspace_dir, command=command, trace=trace, sandbox=sandbox)
-    fingerprint = run_failure_triage_agent(raw_log=raw_log, command=command, repo_map=repo_map, github_context=github_context, reproduction=reproduction, trace=trace)
+    fingerprint = run_failure_triage_agent(raw_log=raw_log, command=command, repo_map=repo_map, github_context=github_context, reproduction=reproduction, trace=trace, flags=flags, workspace_dir=workspace_dir)
     if flags.get("no-memory"):
         playbook_hits = []
         trace.append(step("RepairMemoryAgent", {"disabled": True}, []))
@@ -66,7 +66,7 @@ def run_cifix(flags: dict[str, Any]) -> dict[str, Any]:
     if flags.get("single-candidate"):
         trace.append(step("BaselineMode", {"mode": "single-candidate"}, {"candidateCount": len(candidates)}))
     test_results = run_test_agent(workspace_dir=workspace_dir, candidates=candidates, command=command, playbook_hits=playbook_hits, run_dir=run_dir, trace=trace, sandbox=sandbox)
-    tournament = run_review_agent(workspace_dir=workspace_dir, test_results=test_results, trace=trace)
+    tournament = run_review_agent(workspace_dir=workspace_dir, test_results=test_results, trace=trace, flags=flags, fingerprint=fingerprint, playbook_hits=playbook_hits)
     selected = tournament["selected"]
     memory_write = (
         {"written": False, "reason": "memory disabled"}

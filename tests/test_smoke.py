@@ -16,6 +16,7 @@ from cifix.agents.patch_agent import generate_rule_patch_candidates
 from cifix.agents.github_writer_agent import auto_merge_gate_error, build_repair_branch, run_github_writer_agent
 from cifix.github import load_github_context, parse_github_url
 from cifix.inspect import inspect_github
+from cifix.model import normalize_model_review, normalize_model_triage
 from cifix.rag import DashScopeEmbeddingProvider, HybridRepairRAG, ZhipuEmbeddingProvider, build_repair_query, create_embedding_provider
 from cifix.rag import vector_db_from_flags
 from cifix.run import choose_sandbox_for_repo, run_cifix
@@ -47,6 +48,8 @@ class CifixSmokeTest(unittest.TestCase):
             self.assertIn("disabled: Boolean(loading)", patch)
             memory = json.loads((run_dir / "memory-write.json").read_text())
             self.assertTrue(memory["written"])
+            self.assertEqual(json.loads((run_dir / "llm-triage.json").read_text()), {"skipped": True})
+            self.assertEqual(json.loads((run_dir / "llm-review.json").read_text())["diagnosis"]["skipped"], "model disabled")
 
     def test_eval_runner_summarizes_multiple_fixture_cases(self) -> None:
         with tempfile.TemporaryDirectory(prefix="cifix-eval-") as out:
@@ -79,6 +82,39 @@ class CifixSmokeTest(unittest.TestCase):
         multifile_cases = [case for case in cases if case.get("difficulty") == "project-level-multifile"]
         self.assertEqual(len(multifile_cases), 3)
         self.assertTrue(all(len(case.get("expectedChangedFiles") or []) >= 2 for case in multifile_cases))
+
+    def test_model_triage_normalization_filters_unknown_files(self) -> None:
+        triage = normalize_model_triage(
+            {
+                "rootCause": "Provider exposes full_name but consumers read name.",
+                "failureCategory": "contract mismatch",
+                "affectedModules": ["src/clinic/summary.py", "../secret.py", "missing.py"],
+                "suspectedFix": "Update all consumers.",
+                "evidence": ["KeyError at summary.py"],
+                "confidence": 1.7,
+            },
+            {"files": ["src/clinic/summary.py"]},
+        )
+        self.assertEqual(triage["failureCategory"], "contract_mismatch")
+        self.assertEqual(triage["affectedModules"], ["src/clinic/summary.py"])
+        self.assertEqual(triage["confidence"], 1.0)
+
+    def test_model_review_normalization_requires_known_candidate(self) -> None:
+        review = normalize_model_review(
+            {
+                "recommendedCandidateId": "patch_good",
+                "riskLevel": "low",
+                "candidateAssessments": [
+                    {"candidateId": "patch_good", "riskLevel": "low", "strengths": ["passes"], "concerns": []},
+                    {"candidateId": "patch_unknown", "riskLevel": "low"},
+                ],
+                "memoryQuality": {"specificity": "high", "reuseValue": "high", "overfitRisk": "low"},
+            },
+            {"patch_good"},
+        )
+        self.assertEqual(review["recommendedCandidateId"], "patch_good")
+        self.assertEqual(len(review["candidateAssessments"]), 1)
+        self.assertEqual(review["memoryQuality"]["specificity"], "high")
 
     def test_rag_relevance_accepts_useful_verified_repair_memory(self) -> None:
         case = {

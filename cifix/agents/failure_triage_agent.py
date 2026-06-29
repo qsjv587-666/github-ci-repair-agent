@@ -1,15 +1,36 @@
 from __future__ import annotations
 
 import re
+from pathlib import Path
 from typing import Any
 
 from ..core.trace import step
+from ..model import generate_model_triage, model_config_from_env
 
 
-def run_failure_triage_agent(*, raw_log: str, command: str, repo_map: dict[str, Any], github_context: dict[str, Any] | None, reproduction: dict[str, Any], trace: list[dict]) -> dict[str, Any]:
+def run_failure_triage_agent(*, raw_log: str, command: str, repo_map: dict[str, Any], github_context: dict[str, Any] | None, reproduction: dict[str, Any], trace: list[dict], flags: dict[str, Any] | None = None, workspace_dir: Path | None = None) -> dict[str, Any]:
     fingerprint = create_failure_fingerprint(raw_log, command, repo_map, github_context, reproduction)
     trace.append(step("FailureTriageAgent", {"logChars": len(raw_log)}, fingerprint))
+    model_config = model_config_from_env(flags or {})
+    model_result = safe_generate_model_triage(
+        workspace_dir=workspace_dir,
+        fingerprint=fingerprint,
+        raw_log=raw_log,
+        reproduction=reproduction,
+        repo_map=repo_map,
+        model_config=model_config,
+    )
+    if model_result.get("triage"):
+        fingerprint["llmTriage"] = model_result["triage"]
+    trace.append(step("LLMTriageAgent", {"enabled": model_config["enabled"], "provider": model_config["provider"], "model": model_config["model"]}, model_result["diagnosis"]))
     return fingerprint
+
+
+def safe_generate_model_triage(**kwargs: Any) -> dict[str, Any]:
+    try:
+        return generate_model_triage(**kwargs)
+    except Exception as error:
+        return {"triage": None, "diagnosis": {"error": str(error), "fallback": "rule fingerprint"}}
 
 
 def create_failure_fingerprint(raw_log: str, command: str, repo_map: dict[str, Any], github_context: dict[str, Any] | None, reproduction: dict[str, Any]) -> dict[str, Any]:

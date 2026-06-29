@@ -6,7 +6,7 @@
 
 ## 1. 项目一句话
 
-这是一个面向 GitHub Actions CI 失败场景的多 Agent 自动修复系统。它可以接收一个失败的 GitHub PR / workflow run / job URL，也可以由本地 watcher 周期性扫描目标仓库 open PR，在发现 CI failed 后自动触发修复流程。系统会读取 PR 和 CI 上下文，在本地隔离 workspace 复现失败，生成多个候选 patch，逐个运行测试验证，选择风险最低的可行修复，并在有权限的仓库中自动推送修复分支、创建修复 PR。
+这是一个面向 GitHub Actions CI 失败场景的多 Agent 自动修复系统。它可以接收一个失败的 GitHub PR / workflow run / job URL，也可以由本地 watcher 周期性扫描目标仓库 open PR，在发现 CI failed 后自动触发修复流程。系统会读取 PR 和 CI 上下文，在本地隔离 workspace 复现失败，由 LLM Triage / Patch / Review 三个模型 Agent 分别负责根因分析、候选修复生成和风险评审，再由确定性 Test / Gate / GitHub Writer 节点完成验证与写回。
 
 更适合简历或面试第一句话的表述：
 
@@ -90,11 +90,11 @@ Python profile contract demo 的关键记录：
 
 - `cifix/agents/setup_agent.py`：安装依赖或执行准备命令。
 - `cifix/agents/reproducer_agent.py`：复现 CI 失败。
-- `cifix/agents/failure_triage_agent.py`：把日志和复现结果转成 Failure Fingerprint。
+- `cifix/agents/failure_triage_agent.py`：把日志和复现结果转成 Failure Fingerprint，并在 `--use-model` 时调用 LLM Triage Agent 生成 rootCause、affectedModules、suspectedFix。
 - `cifix/agents/repair_memory_agent.py`：从静态 playbook 和历史 repair memory 里做 Hybrid RAG 检索。
-- `cifix/agents/patch_agent.py`：生成候选 patch，包含模型生成和规则 fallback。
+- `cifix/agents/patch_agent.py`：LLM Patch Agent 生成候选 patch，并保留规则 fallback。
 - `cifix/agents/test_agent.py`：逐个应用候选 patch 并运行测试验证。
-- `cifix/agents/review_agent.py`：排序候选 patch，选择最小可行修复。
+- `cifix/agents/review_agent.py`：LLM Review Agent 对候选 patch 做风险解释和推荐，最终仍通过确定性门禁选择可行修复。
 - `cifix/agents/memory_writer_agent.py`：把验证通过的修复写入历史记忆。
 - `cifix/agents/github_writer_agent.py`：在开启 `--create-pr` 时推修复分支并创建 PR；在开启 `--auto-merge-repair-pr` 且通过门禁时自动 merge 修复 PR。
 - `cifix/agents/report_writer_agent.py`：输出报告、trace、patch、验证结果等 artifacts。
@@ -104,7 +104,7 @@ Python profile contract demo 的关键记录：
 - `cifix/github.py`：GitHub PR / Actions API 读取和 PR 创建。
 - `cifix/watch.py`：本地轮询目标仓库 open PR，检测 CI failure，并对新失败自动触发修复。
 - `cifix/rag.py`：BM25、向量检索、ChromaDB / SQLite 向量后端、embedding provider。
-- `cifix/model.py`：Poe / Claude Opus 模型调用和候选 patch JSON 解析。
+- `cifix/model.py`：Poe / Claude Opus 模型调用，以及 Triage / Patch / Review 三类 JSON 输出解析。
 - `cifix/tools/workspace.py`：clone / copy repo、checkout head commit、推断命令、repo map。
 - `cifix/tools/command.py`：命令 allowlist 和安全执行。
 - `cifix/tools/patch.py`：patch 应用、恢复 baseline、生成 git diff。
@@ -123,11 +123,11 @@ Python profile contract demo 的关键记录：
 -> 准备隔离 workspace
 -> 安装依赖或准备环境
 -> 运行原始测试复现失败
--> 生成 Failure Fingerprint
+-> 生成 Rule Fingerprint 和 LLM triage
 -> Hybrid RAG 检索历史修复依据
--> Patch Agent 生成多个候选 patch
+-> LLM Patch Agent 生成多个候选 patch，规则 fallback 补充候选
 -> Test Agent 逐个验证候选 patch
--> Review Agent 选择最佳 patch
+-> LLM Review Agent + deterministic gate 选择最佳 patch
 -> Memory Writer 写入验证过的 repair memory
 -> GitHub Writer 可选创建修复 PR
 -> Report Writer 写 artifacts
@@ -779,17 +779,17 @@ RAG eval 分成两种模式：
 
 > CI 自动修复不是单纯“让模型改代码”，而是一条工程流程：要先读取 GitHub 上下文，理解失败日志，复现失败，检索历史修复经验，生成候选 patch，再逐个验证和排序，最后写回 GitHub。单 Agent 也能尝试完成这些事，但过程容易变成黑盒，面试官很难判断它到底有没有复现、有没有测试、有没有乱改测试。
 >
-> 所以我把它拆成多个职责明确的 Agent，每个 Agent 只负责一个环节，并且都有结构化输入输出。上游 Agent 产出的 failure fingerprint、RAG evidence、candidate patches、verification results 会成为下游 Agent 的决策依据。这样整个修复流程可以被 trace 回放，也可以做 ablation，对比去掉记忆、去掉多候选验证后的效果。
+> 所以我把它拆成多个职责明确的 Agent，每个 Agent 只负责一个环节，并且都有结构化输入输出。当前模型侧有三个 LLM Agent：Triage Agent 负责根因和影响面判断，Patch Agent 负责生成候选修复，Review Agent 负责风险评审和推荐；执行侧的 Reproducer、Test、Memory Writer、GitHub Writer 是确定性工具节点和安全门禁。这样整个修复流程可以被 trace 回放，也可以做 ablation，对比去掉记忆、去掉多候选验证后的效果。
 
 如果面试官继续追问“这是不是只是普通工作流”，可以补一句：
 
-> 是的，它本质上是一个 agentic workflow，而不是几个 Agent 随机聊天。我认为工程项目里更重要的是可控和可验证，所以采用 Supervisor 编排的状态流：每一步既可以调用工具，也可以调用模型，但最终都必须把结果落到结构化状态和测试证据上。
+> 是的，它是 Supervisor 编排的 multi-agent workflow，不是几个 Agent 随机聊天。我把 LLM 放在诊断、生成和评审三个需要推理的环节，把测试执行、patch 验证、写回和 merge 门禁保持为确定性逻辑，这样既有多 Agent 推理，也不会让模型直接拥有危险操作权限。
 
 ### 18.2 多 Agent 之间怎么协作
 
 可以这样回答：
 
-> 多 Agent 之间不是通过自然语言闲聊协作，而是通过结构化状态传递。比如诊断 Agent 产出 failure fingerprint，记忆 Agent 用 fingerprint 去检索历史修复案例，Patch Agent 基于日志、fingerprint 和 RAG evidence 生成多个候选 patch，Test Agent 逐个应用 patch 并运行测试，Review Agent 根据测试结果、改动范围、风险标签和历史依据选择最终修复。
+> 多 Agent 之间不是通过自然语言闲聊协作，而是通过结构化状态传递。Rule Triage 先产出稳定的 failure fingerprint，LLM Triage 再补充 rootCause、affectedModules 和 suspectedFix；Memory Agent 用这些上下文去检索历史修复案例；LLM Patch Agent 基于日志、triage 和 RAG evidence 生成多个候选 patch；Test Agent 逐个应用 patch 并运行测试；LLM Review Agent 根据测试结果、diff、风险标签和历史依据做风险解释与推荐；最后 deterministic gate 决定是否采用和写回。
 >
 > 所有步骤都会写入 trace，所以我可以解释一次修复为什么选择这个 patch，而不是另一个 patch。
 
@@ -798,11 +798,11 @@ RAG eval 分成两种模式：
 ```text
 GitHub failed PR
 -> 失败日志和改动文件
--> Failure Fingerprint
+-> Rule Fingerprint + LLM Triage
 -> Hybrid RAG 召回历史修复依据
--> 多个候选 patch
+-> LLM Patch Agent + rule fallback 生成多个候选 patch
 -> 每个 patch 独立测试
--> 风险排序和最小可行修复
+-> LLM Review + deterministic gate 选择最小可行修复
 -> 创建 repair PR / 评论源 PR
 ```
 

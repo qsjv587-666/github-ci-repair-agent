@@ -23,6 +23,8 @@ def run_report_writer_agent(**kwargs: Any) -> None:
     trace = kwargs["trace"]
     run_id = kwargs["run_id"]
     started_at = kwargs["started_at"]
+    llm_triage = fingerprint.get("llmTriage")
+    llm_review = tournament.get("llmReview")
 
     (run_dir / "failure-fingerprint.json").write_text(json_text(fingerprint))
     if github_context:
@@ -35,6 +37,8 @@ def run_report_writer_agent(**kwargs: Any) -> None:
     (run_dir / "memory-write.json").write_text(json_text(memory_write))
     (run_dir / "github-write.json").write_text(json_text(github_write))
     (run_dir / "model-diagnosis.json").write_text(json_text(model_diagnosis))
+    (run_dir / "llm-triage.json").write_text(json_text(llm_triage or {"skipped": True}))
+    (run_dir / "llm-review.json").write_text(json_text(llm_review or {"skipped": True}))
     (run_dir / "verification.json").write_text(
         json_text(
             {
@@ -87,9 +91,19 @@ def render_report(run_id: str, started_at: str, fingerprint: dict[str, Any], pla
 ```json
 {json_text(model_diagnosis)}```
 
+## LLM Triage Agent
+
+```json
+{json_text(fingerprint.get("llmTriage") or {"skipped": True})}```
+
 ## Patch Tournament
 
 {tournament_lines}
+
+## LLM Review Agent
+
+```json
+{json_text(tournament.get("llmReview") or {"skipped": True})}```
 
 ## Recommended Patch
 
