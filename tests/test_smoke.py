@@ -12,7 +12,7 @@ from cifix.dashboard import generate_dashboard
 from cifix.eval import discover_cases, grade_hit_relevance, relevance_profile_for_case, run_eval
 from cifix.agents.failure_triage_agent import create_failure_fingerprint
 from cifix.agents.memory_writer_agent import run_memory_writer_agent
-from cifix.agents.patch_agent import generate_rule_patch_candidates
+from cifix.agents.patch_agent import generate_rule_patch_candidates, route_repair_agents
 from cifix.agents.github_writer_agent import auto_merge_gate_error, build_repair_branch, run_github_writer_agent
 from cifix.github import load_github_context, parse_github_url
 from cifix.inspect import inspect_github
@@ -115,6 +115,15 @@ class CifixSmokeTest(unittest.TestCase):
         self.assertEqual(review["recommendedCandidateId"], "patch_good")
         self.assertEqual(len(review["candidateAssessments"]), 1)
         self.assertEqual(review["memoryQuality"]["specificity"], "high")
+
+    def test_repair_router_routes_python_failures_to_specialized_agents(self) -> None:
+        agents = route_repair_agents(
+            {"language": "python", "failureType": "runtime_error", "errorCode": "KeyError"},
+            {"languages": ["python"]},
+        )
+        names = [agent.name for agent in agents]
+        self.assertIn("python_contract_repair", names)
+        self.assertIn("generic_rule_repair", names)
 
     def test_rag_relevance_accepts_useful_verified_repair_memory(self) -> None:
         case = {
@@ -337,6 +346,7 @@ class CifixSmokeTest(unittest.TestCase):
         candidate = candidates[0]
         changed_files = {edit["file"] for edit in candidate["edits"]}
         self.assertEqual(candidate["id"], "patch_python_profile_contract_all_consumers")
+        self.assertEqual(candidate["repairAgent"], "python_contract_repair")
         self.assertEqual(
             changed_files,
             {
@@ -360,6 +370,7 @@ class CifixSmokeTest(unittest.TestCase):
         candidate = candidates[0]
         changed_files = {edit["file"] for edit in candidate["edits"]}
         self.assertEqual(candidate["id"], "patch_python_import_refactor_all_call_sites")
+        self.assertEqual(candidate["repairAgent"], "python_import_repair")
         self.assertEqual(
             changed_files,
             {

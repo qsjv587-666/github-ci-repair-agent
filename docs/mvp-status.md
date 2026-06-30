@@ -258,7 +258,7 @@ note: this is an end-to-end local repair smoke, not a full-repository CI load te
 
 Suggested description:
 
-> Built CIFix Agent, a Python multi-agent workflow for GitHub Actions CI failure diagnosis and repair. The system turns job logs into failure fingerprints, retrieves historical repair evidence through hybrid RAG (BM25 + vector cosine retrieval), uses LLM Triage / Patch / Review agents for diagnosis, candidate generation, and risk review, validates patches in an isolated workspace, and emits structured reports, PR comment drafts, traces, and a dashboard. Implemented read-only GitHub PR/Actions ingestion, command allowlists, verified repair memory, deterministic safety gates, and baseline evals across full/no-memory/single-candidate variants.
+> Built CIFix Agent, a Python multi-agent workflow for GitHub Actions CI failure diagnosis and repair. The system turns job logs into failure fingerprints, retrieves historical repair evidence through hybrid RAG (BM25 + vector cosine retrieval), uses LLM Triage / Patch / Review agents for diagnosis, candidate generation, and risk review, and routes failures to specialized repair agents for contract, import, lint, and type-error fixes. It validates patches in an isolated workspace and emits structured reports, PR comment drafts, traces, and a dashboard. Implemented read-only GitHub PR/Actions ingestion, command allowlists, verified repair memory, deterministic safety gates, and baseline evals across full/no-memory/single-candidate variants.
 
 Suggested metrics to report from the current MVP:
 
@@ -269,7 +269,7 @@ Suggested metrics to report from the current MVP:
 - 15 / 15 success on Python benchmark eval.
 - 12 / 12 success on project-level Python benchmark eval across cold/warm RAG modes.
 - 15 / 15 successful runs in baseline comparison.
-- 40 unit/smoke tests.
+- 41 unit/smoke tests.
 - Read-only GitHub inspect verified on a public PR.
 - Real GitHub Python demo: source PR #14 failed on `KeyError: 'name'`; CIFix created repair PR #15; after merging #15 into the source branch, PR #14 CI reran successfully.
 - Complex real GitHub Python demo: source PR #16 failed on a multi-file profile contract mismatch; CIFix created repair PR #17 with a 3-source-file patch; after merging #17 into the source branch, PR #16 CI reran successfully.

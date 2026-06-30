@@ -127,13 +127,14 @@ Current scope:
 - Local workspace execution for demo repo fixtures, with optional Docker sandboxing for setup, reproduction, and patch verification commands.
 - GitHub read-only context loading for PR metadata, changed files, workflow jobs, and job logs when a token is provided.
 - Optional Poe model mode for Claude Opus via OpenAI-compatible `/v1/chat/completions`, now used by three LLM agents: Triage, Patch, and Review.
+- RepairRouter for patch generation: routes each failure to specialized repair agents for Python contract mismatches, import refactors, lint errors, type errors, JavaScript lint errors, and generic fallback rules.
 - Failure Fingerprint generation.
 - Hybrid RAG memory retrieval: BM25 keyword retrieval + vector database retrieval + hybrid reranking.
 - ChromaDB vector database backend via `--vector-db chroma` or `CIFIX_VECTOR_DB=chroma`; SQLite brute-force vector scan remains as the zero-dependency fallback.
 - Embedding providers: local hashing fallback, DashScope/Qwen `text-embedding-v4`, and Zhipu `embedding-3`.
 - Verified repair memory written only after tests pass, then indexed into the RAG store.
 - Memory governance: skip noop/test-changing/high-risk memories, deduplicate verified repairs, and persist quality/confidence metadata for reranking.
-- Patch Tournament with at least two candidates.
+- Patch Tournament with at least two candidates from LLM PatchAgent and/or specialized repair agents.
 - Command safety policy with an allowlist for test/lint/typecheck commands, including Python `unittest`, `pytest`, `ruff check`, and `mypy`.
 - Structured artifacts: report, trace, LLM triage, patch candidates, LLM review, selected patch, risk report, PR comment draft, GitHub write-back result.
 - Optional GitHub write-back via `--create-pr`: commit the verified patch, push a repair branch, and create a PR when `GITHUB_TOKEN` has write permissions.

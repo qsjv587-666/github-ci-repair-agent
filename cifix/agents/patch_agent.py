@@ -1,11 +1,20 @@
 from __future__ import annotations
 
 import re
+from concurrent.futures import ThreadPoolExecutor
+from dataclasses import dataclass
 from pathlib import Path
-from typing import Any
+from typing import Any, Callable
 
 from ..core.trace import step
 from ..model import generate_model_patch_candidates, model_config_from_env
+
+
+@dataclass(frozen=True)
+class RepairAgentSpec:
+    name: str
+    description: str
+    generator: Callable[[Path, list[dict[str, Any]], dict[str, Any]], list[dict[str, Any]]]
 
 
 def run_patch_agent(*, flags: dict[str, Any], workspace_dir: Path, fingerprint: dict[str, Any], playbook_hits: list[dict[str, Any]], raw_log: str, reproduction: dict[str, Any], repo_map: dict[str, Any], trace: list[dict]) -> dict[str, Any]:
@@ -20,8 +29,8 @@ def run_patch_agent(*, flags: dict[str, Any], workspace_dir: Path, fingerprint: 
         model_config=model_config,
     )
     trace.append(step("ModelPatchAgent", {"enabled": model_config["enabled"], "provider": model_config["provider"], "model": model_config["model"]}, model_result["diagnosis"]))
-    rule_candidates = generate_rule_patch_candidates(workspace_dir, playbook_hits, fingerprint)
-    candidates = merge_patch_candidates(model_result["candidates"], rule_candidates)
+    repair_agent_result = run_repair_agents(workspace_dir=workspace_dir, playbook_hits=playbook_hits, fingerprint=fingerprint, repo_map=repo_map, trace=trace)
+    candidates = merge_patch_candidates(model_result["candidates"], repair_agent_result["candidates"])
     trace.append(step("PatchAgent", {"candidateCount": len(candidates)}, [public_candidate(candidate) for candidate in candidates]))
     return {"candidates": candidates, "modelDiagnosis": model_result["diagnosis"]}
 
@@ -41,16 +50,97 @@ def merge_patch_candidates(model_candidates: list[dict[str, Any]], rule_candidat
             candidate_id = f"{candidate_id}_{len(by_id) + 1}"
         by_id[candidate_id] = {**candidate, "id": candidate_id}
     values = list(by_id.values())
-    return values[: max(2, min(4, len(values)))]
+    return values[: max(2, min(6, len(values)))]
+
+
+def run_repair_agents(*, workspace_dir: Path, playbook_hits: list[dict[str, Any]], fingerprint: dict[str, Any], repo_map: dict[str, Any], trace: list[dict]) -> dict[str, Any]:
+    agents = route_repair_agents(fingerprint, repo_map)
+    results: list[dict[str, Any]] = []
+    with ThreadPoolExecutor(max_workers=min(4, max(1, len(agents)))) as executor:
+        futures = [
+            executor.submit(run_single_repair_agent, agent=agent, workspace_dir=workspace_dir, playbook_hits=playbook_hits, fingerprint=fingerprint)
+            for agent in agents
+        ]
+        for future in futures:
+            results.append(future.result())
+    candidates = []
+    for result in results:
+        candidates.extend(result["candidates"])
+    if not candidates:
+        candidates = [noop_candidate("patch_noop_report_only", "No repair agent produced a deterministic patch.")]
+    if len(candidates) == 1:
+        candidates.append(noop_candidate("patch_noop_baseline", "Baseline no-op candidate for tournament comparison."))
+    trace.append(
+        step(
+            "RepairRouter",
+            {"failureType": fingerprint.get("failureType"), "errorCode": fingerprint.get("errorCode"), "language": fingerprint.get("language")},
+            {
+                "agents": [
+                    {
+                        "name": result["name"],
+                        "description": result["description"],
+                        "candidateCount": len(result["candidates"]),
+                        "candidateIds": [candidate["id"] for candidate in result["candidates"]],
+                        "error": result["error"],
+                    }
+                    for result in results
+                ],
+                "candidateCount": len(candidates),
+            },
+        )
+    )
+    return {"agents": results, "candidates": candidates}
+
+
+def run_single_repair_agent(*, agent: RepairAgentSpec, workspace_dir: Path, playbook_hits: list[dict[str, Any]], fingerprint: dict[str, Any]) -> dict[str, Any]:
+    try:
+        candidates = tag_repair_agent_candidates(agent.name, agent.generator(workspace_dir, playbook_hits, fingerprint))
+        error = None
+    except Exception as exc:
+        candidates = []
+        error = str(exc)
+    return {"name": agent.name, "description": agent.description, "candidates": candidates, "error": error}
+
+
+def route_repair_agents(fingerprint: dict[str, Any], repo_map: dict[str, Any]) -> list[RepairAgentSpec]:
+    failure_type = fingerprint.get("failureType")
+    language = fingerprint.get("language")
+    agents = []
+    if failure_type == "lint_error":
+        if language == "python":
+            agents.append(REPAIR_AGENT_REGISTRY["python_lint_repair"])
+        if language in {"javascript", "typescript"} or "javascript" in repo_map.get("languages", []):
+            agents.append(REPAIR_AGENT_REGISTRY["javascript_lint_repair"])
+    if failure_type in {"runtime_error", "test_assertion_failure"} and language == "python":
+        agents.append(REPAIR_AGENT_REGISTRY["python_contract_repair"])
+    if failure_type == "import_error" and language == "python":
+        agents.append(REPAIR_AGENT_REGISTRY["python_import_repair"])
+    if failure_type == "typecheck_error" and language == "python":
+        agents.append(REPAIR_AGENT_REGISTRY["python_type_repair"])
+    agents.append(REPAIR_AGENT_REGISTRY["generic_rule_repair"])
+    return list(dict.fromkeys(agents))
+
+
+def tag_repair_agent_candidates(agent_name: str, candidates: list[dict[str, Any]]) -> list[dict[str, Any]]:
+    tagged = []
+    for candidate in candidates:
+        tagged.append({**candidate, "source": f"repair-agent:{agent_name}", "repairAgent": agent_name})
+    return tagged
 
 
 def generate_rule_patch_candidates(workspace_dir: Path, playbook_hits: list[dict[str, Any]], fingerprint: dict[str, Any] | None = None) -> list[dict[str, Any]]:
+    candidates = run_repair_agents(
+        workspace_dir=workspace_dir,
+        playbook_hits=playbook_hits,
+        fingerprint=fingerprint or {},
+        repo_map={},
+        trace=[],
+    )["candidates"]
+    return candidates
+
+
+def generate_generic_rule_candidates(workspace_dir: Path, playbook_hits: list[dict[str, Any]], fingerprint: dict[str, Any] | None = None) -> list[dict[str, Any]]:
     candidates = []
-    candidates.extend(generate_lint_unused_var_candidates(workspace_dir, playbook_hits))
-    candidates.extend(generate_python_profile_contract_candidates(workspace_dir, playbook_hits, fingerprint or {}))
-    candidates.extend(generate_python_import_refactor_candidates(workspace_dir, playbook_hits, fingerprint or {}))
-    candidates.extend(generate_python_ruff_candidates(workspace_dir, playbook_hits, fingerprint or {}))
-    candidates.extend(generate_python_mypy_candidates(workspace_dir, playbook_hits, fingerprint or {}))
     rules = [
         ("src/login-button.js", "disabled: false", "disabled: Boolean(loading)", "patch_source_loading_disabled", "The source state ignores loading and always leaves the button enabled."),
         ("src/counter.js", "return count;", "return count + 1;", "patch_counter_increment", "increment should return the next count rather than the current count."),
@@ -97,11 +187,11 @@ def generate_rule_patch_candidates(workspace_dir: Path, playbook_hits: list[dict
                 "edits": [{"file": "test/login-button.test.js", "from": "assert.equal(state.disabled, true)", "to": "assert.equal(state.disabled, false)"}],
             }
         )
-    if not candidates:
-        candidates.append({"id": "patch_noop_report_only", "hypothesis": "No deterministic patch rule matched this failure.", "riskTags": ["noop"], "source": "rule", "edits": []})
-    if len(candidates) == 1:
-        candidates.append({"id": "patch_noop_baseline", "hypothesis": "Baseline no-op candidate for tournament comparison.", "riskTags": ["noop"], "source": "rule", "edits": []})
     return candidates
+
+
+def noop_candidate(candidate_id: str, hypothesis: str) -> dict[str, Any]:
+    return {"id": candidate_id, "hypothesis": hypothesis, "riskTags": ["noop"], "source": "repair-agent:noop", "repairAgent": "noop", "edits": []}
 
 
 def generate_python_ruff_candidates(workspace_dir: Path, playbook_hits: list[dict[str, Any]], fingerprint: dict[str, Any]) -> list[dict[str, Any]]:
@@ -268,6 +358,41 @@ def public_candidate(candidate: dict[str, Any]) -> dict[str, Any]:
         "hypothesis": candidate["hypothesis"],
         "playbookId": candidate.get("playbookId"),
         "source": candidate.get("source"),
+        "repairAgent": candidate.get("repairAgent"),
         "riskTags": candidate.get("riskTags"),
         "changedFiles": [edit["file"] for edit in candidate.get("edits", [])],
     }
+
+
+REPAIR_AGENT_REGISTRY: dict[str, RepairAgentSpec] = {
+    "python_contract_repair": RepairAgentSpec(
+        name="python_contract_repair",
+        description="Repairs Python provider/consumer field contract mismatches and assertion failures.",
+        generator=generate_python_profile_contract_candidates,
+    ),
+    "python_import_repair": RepairAgentSpec(
+        name="python_import_repair",
+        description="Repairs Python module path changes after refactors.",
+        generator=generate_python_import_refactor_candidates,
+    ),
+    "python_lint_repair": RepairAgentSpec(
+        name="python_lint_repair",
+        description="Repairs Python lint failures such as ruff unused imports.",
+        generator=generate_python_ruff_candidates,
+    ),
+    "python_type_repair": RepairAgentSpec(
+        name="python_type_repair",
+        description="Repairs Python type-check failures such as optional return-value errors.",
+        generator=generate_python_mypy_candidates,
+    ),
+    "javascript_lint_repair": RepairAgentSpec(
+        name="javascript_lint_repair",
+        description="Repairs JavaScript/TypeScript lint failures such as unused variables.",
+        generator=lambda workspace_dir, playbook_hits, fingerprint: generate_lint_unused_var_candidates(workspace_dir, playbook_hits),
+    ),
+    "generic_rule_repair": RepairAgentSpec(
+        name="generic_rule_repair",
+        description="Fallback deterministic repair rules for known fixture and benchmark patterns.",
+        generator=generate_generic_rule_candidates,
+    ),
+}
